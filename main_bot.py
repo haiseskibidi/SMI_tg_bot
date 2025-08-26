@@ -583,8 +583,10 @@ class NewsMonitorWithBot:
             if self.telegram_bot:
                 await self.telegram_bot.send_error_alert(f"Критическая ошибка: {e}")
     
-    def get_channel_region(self, channel_username: str) -> str:
-        """Определить регион канала по его username"""
+    def get_channel_regions(self, channel_username: str) -> list:
+        """Определить ВСЕ регионы канала по его username (может быть в нескольких)"""
+        found_regions = []
+        
         try:
             channels_config_path = "config/channels_config.yaml"
             with open(channels_config_path, 'r', encoding='utf-8') as f:
@@ -596,16 +598,20 @@ class NewsMonitorWithBot:
                     channels = region_data.get('channels', [])
                     for channel in channels:
                         if channel.get('username') == channel_username:
+                            found_regions.append(region_key)
                             logger.info(f"🗂️ Канал @{channel_username} найден в регионе '{region_key}'")
-                            return region_key
             else:
                 # Старая структура для обратной совместимости
                 all_channels = channels_data.get('channels', [])
                 for channel in all_channels:
                     if channel.get('username') == channel_username:
                         region = channel.get('region', 'general')
+                        found_regions.append(region)
                         logger.info(f"🗂️ Канал @{channel_username} найден в конфигурации: регион '{region}'")
-                        return region
+            
+            # Если канал найден хотя бы в одном регионе, возвращаем найденные
+            if found_regions:
+                return found_regions
             
             # Если канал не найден, определяем по ключевым словам из динамической конфигурации
             channel_lower = channel_username.lower()
@@ -630,14 +636,19 @@ class NewsMonitorWithBot:
             if best_match_score > 0:
                 region_name = self.regions_config.get(best_match_region, {}).get('name', best_match_region)
                 logger.info(f"🗂️ Канал @{channel_username} определен как {region_name} ({best_match_score} совпадений)")
-                return best_match_region
+                return [best_match_region]
             else:
                 logger.info(f"🗂️ Канал @{channel_username} определен как общий (нет ключевых слов)")
-                return 'general'
+                return ['general']
                 
         except Exception as e:
             logger.warning(f"⚠️ Ошибка определения региона для {channel_username}: {e}")
-            return 'general'
+            return ['general']
+    
+    def get_channel_region(self, channel_username: str) -> str:
+        """Получить ПЕРВЫЙ регион канала (для обратной совместимости)"""
+        regions = self.get_channel_regions(channel_username)
+        return regions[0] if regions else 'general'
     
     async def setup_realtime_handlers(self):
         """Настройка обработчиков для мгновенной пересылки сообщений"""
@@ -1522,22 +1533,28 @@ class NewsMonitorWithBot:
                     # Например, отправить уведомление администратору
                     logger.error(f"🚨 ВЫСОКИЙ ПРИОРИТЕТ! {alert_category}")
             
-            # Определяем регион канала и соответствующую тему
+            # Определяем ВСЕ регионы канала и соответствующие темы
             channel_username = news.get('channel_username', '')
-            region = self.get_channel_region(channel_username)
+            regions = self.get_channel_regions(channel_username)
             
             # Получаем настройки вывода
             output_config = self.config.get('output', {})
             target = output_config.get('target_group') or output_config.get('target_channel')
             
-            # Определяем ID темы для региона
-            topics = output_config.get('topics', {})
-            thread_id = topics.get(region) if topics else None
+            logger.info(f"📂 Канал @{channel_username} найден в регионах: {regions}")
             
-            if thread_id:
-                logger.info(f"📂 Канал @{channel_username} → регион '{region}' → тема {thread_id}")
-            else:
-                logger.info(f"📂 Канал @{channel_username} → регион '{region}' → общая лента (темы отключены)")
+            # Получаем все ID тем для регионов
+            topics = output_config.get('topics', {})
+            region_threads = []
+            
+            for region in regions:
+                thread_id = topics.get(region) if topics else None
+                region_threads.append((region, thread_id))
+                
+                if thread_id:
+                    logger.info(f"📂 Канал @{channel_username} → регион '{region}' → тема {thread_id}")
+                else:
+                    logger.info(f"📂 Канал @{channel_username} → регион '{region}' → общая лента (темы отключены)")
             
             # Если target не настроен - используем chat_id бота (личный чат)  
             if not target or target in ["@your_news_channel", "your_news_channel"]:
@@ -1606,29 +1623,47 @@ class NewsMonitorWithBot:
                 if url:
                     message += f"\n\n{url}"
             
-            # Отправляем через бота в канал (с темой если указана)
-            if is_media and news.get('media_files'):
-                # Отправляем медиа файлы с caption
-                media_files = news.get('media_files', [])
-                caption = news.get('caption', message)  # Используем message как caption если caption не задан
-                
-                # Если один файл - отправляем как обычное медиа, если несколько - как группу
-                if len(media_files) == 1:
-                    success = await self.telegram_bot.send_media_with_caption(
-                        media_files[0][0], caption, target, media_files[0][1], thread_id
-                    )
-                else:
-                    success = await self.telegram_bot.send_media_group(
-                        media_files, caption, target, thread_id
-                    )
-            else:
-                # Отправляем текстовое сообщение
-                success = await self.telegram_bot.send_message_to_channel(message, target, "HTML", thread_id)
+            # Отправляем через бота в канал (во все регионы/темы)
+            all_success = True
+            sent_count = 0
             
-            if success:
-                logger.info(f"✅ Сообщение отправлено в канал")
+            for region, thread_id in region_threads:
+                try:
+                    logger.info(f"📤 Отправляем в регион '{region}' (тема: {thread_id or 'общая'})")
+                    
+                    if is_media and news.get('media_files'):
+                        # Отправляем медиа файлы с caption
+                        media_files = news.get('media_files', [])
+                        caption = news.get('caption', message)  # Используем message как caption если caption не задан
+                        
+                        # Если один файл - отправляем как обычное медиа, если несколько - как группу
+                        if len(media_files) == 1:
+                            success = await self.telegram_bot.send_media_with_caption(
+                                media_files[0][0], caption, target, media_files[0][1], thread_id
+                            )
+                        else:
+                            success = await self.telegram_bot.send_media_group(
+                                media_files, caption, target, thread_id
+                            )
+                    else:
+                        # Отправляем текстовое сообщение
+                        success = await self.telegram_bot.send_message_to_channel(message, target, "HTML", thread_id)
+                    
+                    if success:
+                        logger.info(f"✅ Сообщение отправлено в регион '{region}'")
+                        sent_count += 1
+                    else:
+                        logger.error(f"❌ Ошибка отправки в регион '{region}'")
+                        all_success = False
+                        
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки в регион '{region}': {e}")
+                    all_success = False
+            
+            if sent_count > 0:
+                logger.info(f"✅ Сообщение отправлено в {sent_count}/{len(region_threads)} регионов")
             else:
-                logger.error("❌ Ошибка отправки в канал")
+                logger.error("❌ Ошибка отправки во все регионы")
                 
         except Exception as e:
             logger.error(f"❌ Ошибка отправки в канал: {e}")
