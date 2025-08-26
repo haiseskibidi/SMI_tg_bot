@@ -9,6 +9,7 @@ logs/
 
 # Кэш подписок
 config/subscriptions_cache.json
+sessions/*.session
 
 # Python кэш
 __pycache__/
