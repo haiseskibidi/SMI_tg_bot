@@ -289,21 +289,37 @@ class TelegramMonitor:
     async def is_already_joined(self, entity) -> bool:
         """Проверка, состоит ли текущий пользователь в канале/чате"""
         try:
-            # Основной метод: пробуем прочитать сообщения
-            # Если можем читать - значит подписаны
-            async for message in self.client.iter_messages(entity, limit=1):
+            # Более надежный метод: проверяем участие через get_participants
+            try:
+                # Пробуем получить информацию об участниках (работает только если мы участники)
+                await self.client.get_participants(entity, limit=1)
                 return True
-            # Если нет сообщений, но нет ошибки доступа - тоже подписаны
-            return True
+            except Exception:
+                # Если не можем получить участников, пробуем читать сообщения
+                try:
+                    # Пробуем прочитать последние сообщения
+                    messages = await self.client.get_messages(entity, limit=1)
+                    # Если можем читать сообщения - подписаны
+                    return True
+                except Exception as read_error:
+                    read_error_msg = str(read_error).lower()
+                    # Проверяем специфические ошибки доступа
+                    if any(keyword in read_error_msg for keyword in [
+                        'forbidden', 'channel_private', 'channel_invalid', 
+                        'participant', 'privacy', 'access', 'join', 'chat_admin_required'
+                    ]):
+                        return False
+                    # Для остальных ошибок (сетевые и т.д.) считаем что подписаны
+                    return True
         except Exception as e:
             error_msg = str(e).lower()
             # Если ошибка связана с отсутствием доступа - не подписаны
             if any(keyword in error_msg for keyword in [
                 'forbidden', 'channel_private', 'channel_invalid', 
-                'participant', 'privacy', 'access', 'join'
+                'participant', 'privacy', 'access', 'join', 'chat_admin_required'
             ]):
                 return False
-            # Для остальных ошибок считаем что подписаны
+            # Для остальных ошибок (сетевые и т.д.) считаем что подписаны
             return True
     
     async def get_new_messages_simple(self, channel_config: dict) -> List[Dict]:
