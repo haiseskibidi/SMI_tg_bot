@@ -42,6 +42,7 @@ venv.bak/
 
 # IDE файлы
 .vscode/
+.cursor/
 .idea/
 *.swp
 *.swo

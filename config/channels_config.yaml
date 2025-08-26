@@ -8,13 +8,9 @@ regions:
       username: amur_mash
     - title: Канал @maximum_news
       username: maximum_news
-    - title: SMI заметки
-      username: SMIzametki
     name: 📰 Общие
   kamchatka:
     channels:
-    - title: СМИ Заметки
-      username: SMIzametki
     - title: ИА Кам24
       username: IA_Kam24
     - title: Регион ТВ
@@ -49,12 +45,20 @@ regions:
       username: vulcanikamchatki
     - title: АиФ Камчатка
       username: AiFKamchatka
-    - title: КамчаткаМедиа
-      username: kamchatkamediaru
     - title: Канал @pravonarul
       username: pravonarul
     - title: Канал @melnikov41
       username: melnikov41
+    - title: Канал @chpkamchatka
+      username: chpkamchatka
+    - title: Канал @kamchatinfo
+      username: kamchatinfo
+    - title: Канал @kamchatkamediaru
+      username: kamchatkamediaru
+    - title: Канал @massmediakam
+      username: massmediakam
+    - title: Канал @live_41
+      username: live_41
     name: 🌋 Камчатка
   sakhalin:
     channels:

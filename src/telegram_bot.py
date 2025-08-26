@@ -25,6 +25,7 @@ class TelegramBot:
         self.chat_id = chat_id
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self.monitor_bot = monitor_bot
+        self.main_instance = monitor_bot  # Алиас для обратной совместимости
         
         logger.info(f"🤖 TelegramBot инициализирован для chat_id: {chat_id}")
         
@@ -56,6 +57,7 @@ class TelegramBot:
         self.register_command("manage_channels", self.cmd_manage_channels)
         self.register_command("stats", self.cmd_stats)
         self.register_command("settings", self.cmd_settings)
+        self.register_command("force_subscribe", self.cmd_force_subscribe)
         
         asyncio.create_task(self.setup_bot_commands())
     
@@ -71,6 +73,7 @@ class TelegramBot:
                 {"command": "stop_monitoring", "description": "🛑 Остановить мониторинг"},
                 {"command": "restart", "description": "🔄 Перезапустить систему"},
                 {"command": "topic_id", "description": "📂 Узнать ID темы"},
+                {"command": "force_subscribe", "description": "📡 Принудительная подписка"},
                 {"command": "settings", "description": "⚙️ Настройки интерфейса"},
                 {"command": "help", "description": "🆘 Справка по командам"}
             ]
@@ -385,7 +388,9 @@ class TelegramBot:
                         )
                         keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
                         await self.edit_message_with_keyboard(add_text, keyboard, use_reply_keyboard=False)
-
+                    elif text == "📡 Принудительная подписка":
+                        logger.info("📡 Нажата кнопка Принудительная подписка")
+                        await self.cmd_force_subscribe(message)
                     elif text == "🏠 Главное меню":
                         logger.info("🏠 Нажата кнопка Главное меню")
                         await self.cmd_start(message)
@@ -971,7 +976,7 @@ class TelegramBot:
             ["📈 Статистика", "➕ Добавить канал"],
             ["🚀 Запуск", "🛑 Стоп"],
             ["🔄 Рестарт", "⚙️ Настройки"],
-            ["🆘 Справка"]
+            ["📡 Принудительная подписка", "🆘 Справка"]
         ]
         
         welcome_text = (
@@ -985,6 +990,7 @@ class TelegramBot:
             "🛑 /stop - остановить мониторинг\n"
             "🔄 /restart - перезапуск системы\n"
             "📂 /topic_id - узнать ID темы в группе\n"
+            "📡 /force_subscribe - принудительная подписка на каналы\n"
             "⚙️ /settings - настройки интерфейса\n\n"
             "⌨️ <b>Или используйте кнопки снизу:</b>"
         )
@@ -2067,6 +2073,134 @@ class TelegramBot:
         channel_link = parts[1].strip()
         await self.add_channel_handler(channel_link)
     
+    async def cmd_force_subscribe(self, message):
+        """Команда /force_subscribe - принудительная подписка на все каналы"""
+        try:
+            await self.send_message(
+                "📡 <b>Принудительная подписка на каналы</b>\n\n"
+                "🔄 Запускаю проверку и подписку на все каналы из конфигурации...\n"
+                "⏳ Это может занять несколько минут..."
+            )
+            
+            # Проверяем что main_instance доступен
+            if not hasattr(self, 'main_instance') or not self.main_instance:
+                await self.send_message("❌ Главный экземпляр системы недоступен")
+                return
+            
+            # Проверяем что telegram_monitor доступен
+            if not hasattr(self.main_instance, 'telegram_monitor') or not self.main_instance.telegram_monitor:
+                await self.send_message("❌ Telegram мониторинг недоступен")
+                return
+            
+            # Очищаем кэш подписок для принудительной перепроверки
+            self.main_instance.clear_subscription_cache()
+            logger.info("🗑️ Кэш подписок очищен для принудительной подписки")
+            
+            # Загружаем список всех каналов из конфигурации
+            channels_data = await self.get_channels_from_config()
+            all_channels = channels_data.get('channels', [])
+            
+            if not all_channels:
+                await self.send_message("❌ Нет каналов для подписки в конфигурации")
+                return
+            
+            await self.send_message(f"📋 Найдено {len(all_channels)} каналов для проверки подписки")
+            
+            # Статистика подписки
+            success_count = 0
+            already_subscribed_count = 0
+            failed_count = 0
+            rate_limited_count = 0
+            
+            from telethon.tl.functions.channels import JoinChannelRequest
+            
+            for i, channel_config in enumerate(all_channels, 1):
+                try:
+                    username = channel_config.get('username', '')
+                    if not username:
+                        continue
+                    
+                    logger.info(f"📡 [{i}/{len(all_channels)}] Проверяем подписку на @{username}")
+                    
+                    # Получаем entity канала
+                    entity = await self.main_instance.telegram_monitor.get_channel_entity(username)
+                    if not entity:
+                        logger.error(f"❌ Не удалось получить entity для @{username}")
+                        failed_count += 1
+                        continue
+                    
+                    # Проверяем подписку
+                    already_joined = await self.main_instance.telegram_monitor.is_already_joined(entity)
+                    
+                    if already_joined:
+                        logger.info(f"✅ Уже подписан на @{username}")
+                        already_subscribed_count += 1
+                        # Добавляем в кэш
+                        self.main_instance.add_channel_to_cache(username)
+                    else:
+                        # Подписываемся
+                        try:
+                            await self.main_instance.telegram_monitor.client(JoinChannelRequest(entity))
+                            logger.info(f"✅ Подписался на @{username}")
+                            success_count += 1
+                            # Добавляем в кэш после успешной подписки
+                            self.main_instance.add_channel_to_cache(username)
+                            await asyncio.sleep(3)  # Пауза между подписками
+                        except Exception as sub_error:
+                            error_msg = str(sub_error).lower()
+                            if "wait" in error_msg and "seconds" in error_msg:
+                                logger.warning(f"⏳ Rate limit на @{username}")
+                                rate_limited_count += 1
+                            elif "already" in error_msg or "участник" in error_msg:
+                                logger.info(f"✅ Уже подписан на @{username}")
+                                already_subscribed_count += 1
+                                # Добавляем в кэш
+                                self.main_instance.add_channel_to_cache(username)
+                            else:
+                                logger.error(f"❌ Ошибка подписки на @{username}: {sub_error}")
+                                failed_count += 1
+                    
+                    # Отправляем промежуточный отчет каждые 10 каналов
+                    if i % 10 == 0:
+                        progress_text = (
+                            f"🔄 <b>Прогресс: {i}/{len(all_channels)}</b>\n\n"
+                            f"✅ Подписался: {success_count}\n"
+                            f"💾 Уже подписан: {already_subscribed_count}\n"
+                            f"⏳ Rate limit: {rate_limited_count}\n"
+                            f"❌ Ошибки: {failed_count}"
+                        )
+                        await self.send_message(progress_text)
+                
+                except Exception as e:
+                    logger.error(f"❌ Ошибка обработки канала @{username}: {e}")
+                    failed_count += 1
+            
+            # Итоговый отчет
+            final_report = (
+                f"📡 <b>Принудительная подписка завершена!</b>\n\n"
+                f"📊 <b>Результаты:</b>\n"
+                f"✅ Успешно подписался: <b>{success_count}</b>\n"
+                f"💾 Уже был подписан: <b>{already_subscribed_count}</b>\n"
+                f"⏳ Rate limit: <b>{rate_limited_count}</b>\n"
+                f"❌ Ошибки: <b>{failed_count}</b>\n\n"
+                f"📋 Всего проверено: <b>{len(all_channels)}</b> каналов\n"
+                f"🎉 Активных подписок: <b>{success_count + already_subscribed_count}</b>"
+            )
+            
+            if rate_limited_count > 0:
+                final_report += (
+                    f"\n\n💡 <b>Rate limit</b> - временное ограничение Telegram.\n"
+                    f"Повторите команду через несколько минут для повторной попытки."
+                )
+            
+            await self.send_message(final_report)
+            logger.info(f"📡 Принудительная подписка завершена: {success_count} новых + {already_subscribed_count} существующих = {success_count + already_subscribed_count} активных подписок")
+            
+        except Exception as e:
+            error_msg = f"❌ Ошибка принудительной подписки: {e}"
+            logger.error(error_msg)
+            await self.send_message(error_msg)
+    
     async def cmd_list_channels(self, message, page: int = 0):
         """Команда /channels - список каналов с пагинацией"""
         try:
@@ -2333,6 +2467,17 @@ class TelegramBot:
             # Сохраняем конфиг
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, allow_unicode=True, indent=2, default_flow_style=False)
+            
+            # ИСПРАВЛЕНИЕ: Очищаем кэш подписок, чтобы при рестарте бот заново подписался на все каналы
+            try:
+                if hasattr(self, 'main_instance') and self.main_instance:
+                    self.main_instance.clear_subscription_cache()
+                    logger.info("🗑️ Кэш подписок очищен после добавления канала")
+                elif hasattr(self, 'monitor_bot') and self.monitor_bot:
+                    self.monitor_bot.clear_subscription_cache()
+                    logger.info("🗑️ Кэш подписок очищен после добавления канала")
+            except Exception as cache_error:
+                logger.warning(f"⚠️ Не удалось очистить кэш подписок: {cache_error}")
             
             logger.info(f"📝 Канал {channel_name} добавлен в регион {region} в {config_path}")
             return True
