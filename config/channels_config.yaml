@@ -1,0 +1,122 @@
+regions:
+  chita:
+    channels: []
+    name: 🏔️ Чита
+  general:
+    channels:
+    - title: Канал @amur_mash
+      username: amur_mash
+    - title: Канал @maximum_news
+      username: maximum_news
+    - title: SMI заметки
+      username: SMIzametki
+    name: 📰 Общие
+  kamchatka:
+    channels:
+    - title: СМИ Заметки
+      username: SMIzametki
+    - title: ИА Кам24
+      username: IA_Kam24
+    - title: Регион ТВ
+      username: regiontv41
+    - title: ГИБДД по Камчатскому краю
+      username: kamchatkadps
+    - title: КБ ГС РАС
+      username: kbgsras
+    - title: ПКГО
+      username: pkgo_official_telegram
+    - title: Камчатка Сегодня
+      username: kamtoday41
+    - title: Правительство Камчатского края
+      username: kamgov41
+    - title: ГУ МЧС России по Камчатскому краю
+      username: mchskam41
+    - title: Камчатский край
+      username: kam_kray
+    - title: Министерство здравоохранения Камчатского края
+      username: minzdrav41region
+    - title: Госавтоинспекция Камчатского края
+      username: gosavtoinspekcia_41
+    - title: УМВД России по Камчатскому краю
+      username: mvd41
+    - title: СУ СК России по Камчатскому краю
+      username: suskr41
+    - title: ИВС ФЕБРАС КВЕРТ
+      username: ivsfebras_kvert
+    - title: Министерство образования Камчатского края
+      username: MinobrazKK
+    - title: Вулканы Камчатки
+      username: vulcanikamchatki
+    - title: АиФ Камчатка
+      username: AiFKamchatka
+    - title: КамчаткаМедиа
+      username: kamchatkamediaru
+    - title: Канал @pravonarul
+      username: pravonarul
+    - title: Канал @melnikov41
+      username: melnikov41
+    name: 🌋 Камчатка
+  sakhalin:
+    channels:
+    - title: АСТВ
+      username: astv_ru
+    - title: Точка 65
+      username: tochka_65
+    - title: Сахалин Онлайн
+      username: sakhonline
+    - title: Правительство Сахалинской области
+      username: sakhgov
+    - title: Южно-Сахалинск
+      username: ysakhalinsk
+    - title: Мой Корсаков
+      username: moykorsakov
+    - title: Министерство образования Сахалинской области
+      username: sakh_minobr
+    - title: Надежда Садина
+      username: nadsadin_official
+    - title: УГИБДД по Сахалинской области
+      username: ugibdd65
+    - title: ГУ МЧС России по Сахалинской области
+      username: info65mchs
+    - title: Канал @incident65
+      username: incident65
+    - title: СахКо
+      username: sakhco
+    - title: Канал @mintrans_sakh
+      username: mintrans_sakh
+    - title: Канал @achs65
+      username: achs65
+    - title: Канал @minsport65
+      username: minsport65
+    - title: Канал @sledcomsakhalin_skr65
+      username: sledcomsakhalin_skr65
+    - title: Канал @mvd_sakh
+      username: mvd_sakh
+    - title: Канал @minstroy_sakh
+      username: minstroy_sakh
+    - title: Канал @Prokuratura_Sakhalin
+      username: Prokuratura_Sakhalin
+    - title: Канал @chpsakhalin
+      username: chpsakhalin
+    - title: Канал @r2d2sakh
+      username: r2d2sakh
+    - title: Канал @adm_uglegorsk
+      username: adm_uglegorsk
+    - title: Канал @crimesakh
+      username: crimesakh
+    - title: Канал @minenergo_sakh
+      username: minenergo_sakh
+    - title: Канал @airportus
+      username: airportus
+    - title: Канал @tsugm
+      username: tsugm
+    - title: Канал @echosakh
+      username: echosakh
+    - title: Канал @tugarevAV
+      username: tugarevAV
+    - title: Канал @sakhalinwatch
+      username: sakhalinwatch
+    name: 🏝️ Сахалин
+  yakutsk:
+    channels: []
+    name: ❄️ Якутск
