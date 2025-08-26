@@ -32,6 +32,10 @@ class TelegramMonitor:
         self.messages_cache = {}
         self.cache_max_size = 1000  # Ограничение для VPS 1GB
         
+        # Кэш подписанных диалогов для быстрой проверки
+        self.dialogs_cache = {}
+        self.dialogs_cache_time = None
+        
         logger.info("📱 TelegramMonitor инициализирован")
     
     async def initialize(self):
@@ -284,27 +288,46 @@ class TelegramMonitor:
         """Очистка кэша для освобождения памяти"""
         self.channels_cache.clear()
         self.messages_cache.clear()
+        self.dialogs_cache.clear()
+        self.dialogs_cache_time = None
         logger.info("🧹 Кэш Telegram клиента очищен")
+
+    async def _update_dialogs_cache(self):
+        """Обновление кэша диалогов (раз в 10 минут)"""
+        from datetime import timedelta
+        
+        now = datetime.now()
+        
+        # Обновляем кэш если он пустой или старше 10 минут
+        if (not self.dialogs_cache_time or 
+            now - self.dialogs_cache_time > timedelta(minutes=10)):
+            
+            logger.info("🔄 Обновляем кэш диалогов...")
+            self.dialogs_cache = {}
+            
+            try:
+                # Получаем все диалоги ОДИН раз
+                async for dialog in self.client.iter_dialogs():
+                    self.dialogs_cache[dialog.entity.id] = True
+                
+                self.dialogs_cache_time = now
+                logger.info(f"✅ Кэш диалогов обновлен: {len(self.dialogs_cache)} каналов")
+                
+            except Exception as e:
+                logger.error(f"❌ Ошибка обновления кэша диалогов: {e}")
 
     async def is_already_joined(self, entity) -> bool:
         """Проверка, состоит ли текущий пользователь в канале/чате"""
         try:
-            # Самый надежный метод: проверяем через список диалогов
-            # get_dialogs() возвращает только те чаты, в которых мы действительно участвуем
+            # Обновляем кэш если нужно
+            await self._update_dialogs_cache()
+            
+            # Быстрая проверка по кэшу
             target_id = entity.id
-            
-            # Получаем все диалоги (чаты/каналы где мы участники)
-            async for dialog in self.client.iter_dialogs():
-                if dialog.entity.id == target_id:
-                    return True
-            
-            # Если канал не найден в диалогах - не подписаны
-            return False
+            return target_id in self.dialogs_cache
             
         except Exception as e:
-            error_msg = str(e).lower()
             logger.debug(f"Ошибка проверки подписки: {e}")
-            
             # При любых ошибках считаем что не подписаны (безопасная сторона)
             return False
     
