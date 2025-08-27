@@ -3,6 +3,8 @@
 .env.local
 .env.production
 
+.cursor/
+
 # Логи
 logs/
 *.log
