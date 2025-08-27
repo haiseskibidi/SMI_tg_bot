@@ -50,6 +50,7 @@ class TelegramBot:
         self.processed_forwards = set()  # Кэш для предотвращения дублирования forward сообщений
         self.pending_region_data = None  # Данные создаваемого региона
         self.active_inline_messages = []  # Список message_id с активными inline кнопками
+        self.current_callback_chat_id = None  # Текущий chat_id из callback для edit_message_with_keyboard
         
         # Регистрируем команды управления
         self.register_command("start", self.cmd_start)
@@ -250,7 +251,7 @@ class TelegramBot:
     
 
     
-    async def edit_message_with_keyboard(self, text: str, keyboard: list = None, message_id: int = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True) -> bool:
+    async def edit_message_with_keyboard(self, text: str, keyboard: list = None, message_id: int = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True, chat_id: int = None) -> bool:
         """Редактировать существующее сообщение"""
         try:
             if not message_id and not self.last_message_id:
@@ -258,6 +259,7 @@ class TelegramBot:
                 return await self.send_message_with_keyboard(text, keyboard, parse_mode, use_reply_keyboard)
             
             msg_id = message_id or self.last_message_id
+            target_chat_id = chat_id or self.chat_id
             
             if use_reply_keyboard:
                 # Для обычной клавиатуры нужно отправить новое сообщение
@@ -267,7 +269,7 @@ class TelegramBot:
             url = f"{self.base_url}/editMessageText"
             
             data = {
-                "chat_id": self.chat_id,
+                "chat_id": target_chat_id,
                 "message_id": msg_id,
                 "text": text,
                 "disable_web_page_preview": True
@@ -311,7 +313,7 @@ class TelegramBot:
                 try:
                     url = f"{self.base_url}/editMessageReplyMarkup"
                     data = {
-                        "chat_id": self.chat_id,
+                        "chat_id": self.chat_id,  # В этом методе используем админский чат (для старых сообщений)
                         "message_id": message_id,
                         "reply_markup": ""  # Убираем кнопки
                     }
@@ -366,12 +368,13 @@ class TelegramBot:
             logger.error(f"❌ Ошибка получения обновлений: {e}")
             return []
     
-    async def delete_user_message(self, message_id):
+    async def delete_user_message(self, message_id, chat_id: int = None):
         """Удалить сообщение пользователя"""
         try:
+            target_chat_id = chat_id or self.chat_id
             url = f"{self.base_url}/deleteMessage"
             data = {
-                "chat_id": self.chat_id,
+                "chat_id": target_chat_id,
                 "message_id": message_id
             }
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -436,11 +439,11 @@ class TelegramBot:
                         await self.command_handlers[command](message)
                         # Удаляем сообщение пользователя для чистоты чата
                         if message_id and self.delete_commands:
-                            await self.delete_user_message(message_id)
+                            await self.delete_user_message(message_id, chat_id)
                     else:
                         await self.send_message(f"❌ Неизвестная команда: /{command}")
                         if message_id and self.delete_commands:
-                            await self.delete_user_message(message_id)
+                            await self.delete_user_message(message_id, chat_id)
                 else:
                     # Обычное сообщение - проверяем кнопки клавиатуры
                     if text == "📊 Статус":
@@ -582,10 +585,11 @@ class TelegramBot:
             
             if current_message_id and data not in keep_buttons_callbacks and not is_navigation:
                 try:
-                    # Убираем кнопки из текущего сообщения
+                    # Убираем кнопки из текущего сообщения  
+                    callback_chat_id = callback_query.get("message", {}).get("chat", {}).get("id", self.chat_id)
                     edit_url = f"{self.base_url}/editMessageReplyMarkup"
                     edit_data = {
-                        "chat_id": self.chat_id,
+                        "chat_id": callback_chat_id,
                         "message_id": current_message_id,
                         "reply_markup": ""
                     }
@@ -607,6 +611,10 @@ class TelegramBot:
                 "chat": callback_query.get("message", {}).get("chat", {}),
                 "from": callback_query.get("from", {})
             }
+            
+            # Сохраняем chat_id из callback для использования в edit_message_with_keyboard
+            self.current_callback_chat_id = callback_query.get("message", {}).get("chat", {}).get("id", self.chat_id)
+            logger.info(f"📱 Callback из чата: {self.current_callback_chat_id} (группа: {self.current_callback_chat_id == self.group_chat_id})")
             
             # Обрабатываем действие  
             if data == "start":
@@ -700,6 +708,9 @@ class TelegramBot:
             
         except Exception as e:
             logger.error(f"❌ Ошибка обработки callback: {e}")
+        finally:
+            # Очищаем callback chat_id после обработки
+            self.current_callback_chat_id = None
     
     async def send_message_to_channel(self, text: str, channel_target: str, parse_mode: str = "HTML", thread_id: int = None) -> bool:
         """Отправить сообщение в канал или группу (с поддержкой тем)"""
@@ -2033,7 +2044,8 @@ class TelegramBot:
                 await self.edit_message_with_keyboard(
                     "❌ <b>Добавление канала отменено</b>",
                     [[{"text": "🏠 Главное меню", "callback_data": "start"}]],
-                    use_reply_keyboard=False
+                    use_reply_keyboard=False,
+                    chat_id=self.current_callback_chat_id
                 )
                 return
             
