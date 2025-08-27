@@ -49,6 +49,7 @@ class TelegramBot:
         self.waiting_for_emoji = False  # Флаг ожидания пользовательского эмодзи
         self.processed_forwards = set()  # Кэш для предотвращения дублирования forward сообщений
         self.pending_region_data = None  # Данные создаваемого региона
+        self.pending_topic_data = None  # Данные темы для автоматического добавления в конфиг
         self.active_inline_messages = []  # Список message_id с активными inline кнопками
         self.current_callback_chat_id = None  # Текущий chat_id из callback для edit_message_with_keyboard
         
@@ -609,6 +610,7 @@ class TelegramBot:
                 "manage_region_",    # Открытие конкретного региона
                 "delete_channel_",   # Просмотр подтверждения удаления
                 "confirm_delete_",   # Подтверждение удаления
+                "auto_add_topic_",   # Автоматическое добавление topic ID
                 "region_"            # Выбор региона для добавления канала
             ]
             
@@ -726,11 +728,15 @@ class TelegramBot:
             elif data.startswith("confirm_create_"):
                 region_key = data.replace("confirm_create_", "")
                 await self.create_region_confirmed(region_key)
+            elif data.startswith("auto_add_topic_"):
+                region_key = data.replace("auto_add_topic_", "")
+                await self.auto_add_topic_to_config(region_key)
             elif data == "region_cancel":
                 self.pending_channel_url = None
                 self.waiting_for_region_name = False
                 self.waiting_for_emoji = False
                 self.pending_region_data = None
+                self.pending_topic_data = None
                 await self.cmd_start(callback_message)
             elif data == "manage_channels":
                 await self.cmd_manage_channels(callback_message)
@@ -1724,6 +1730,7 @@ class TelegramBot:
             chat = message.get("chat", {})
             chat_type = chat.get("type")
             chat_title = chat.get("title", "Неизвестная группа")
+            chat_id = chat.get("id")
             thread_id = message.get("message_thread_id")
             
             if chat_type not in ["group", "supergroup"]:
@@ -1733,32 +1740,128 @@ class TelegramBot:
                 )
                 return
             
+            # Сохраняем данные темы для возможного добавления
+            self.pending_topic_data = {
+                'chat_title': chat_title,
+                'chat_id': chat_id,
+                'thread_id': thread_id
+            }
+            
             if not thread_id:
-                await self.send_message(
+                # Общая лента без темы
+                response_text = (
+                    f"🎯 <b>ID ТЕМЫ ПОЛУЧЕН!</b>\n\n"
                     f"📂 <b>Группа:</b> {chat_title}\n"
-                    "📋 <b>Тема:</b> Общая лента (без темы)\n"
-                    "🆔 <b>Thread ID:</b> null\n\n"
-                    "💡 <b>Настройка config.yaml:</b>\n"
-                    "<code>topics:\n"
-                    "  general: null</code>"
-                )
-            else:
-                await self.send_message(
-                    f"📂 <b>Группа:</b> {chat_title}\n"
-                    "📋 <b>Тема:</b> {определяется автоматически}\n"
-                    f"🆔 <b>Thread ID:</b> {thread_id}\n\n"
-                    "💡 <b>Настройка config.yaml:</b>\n"
-                    "<code>topics:\n"
-                    f"  sakhalin: {thread_id}  # если это Сахалин\n"
-                    f"  kamchatka: {thread_id}  # если это Камчатка</code>\n\n"
-                    "🔄 <b>После настройки перезапустите бота кнопкой 'Рестарт'</b>"
+                    f"🏠 <b>Chat ID:</b> <code>{chat_id}</code>\n"
+                    f"📋 <b>Тема:</b> Общая лента (главная)\n"
+                    f"🆔 <b>Topic ID:</b> <code>null</code>\n\n"
+                    f"📝 <b>Ручная настройка:</b>\n"
+                    f"<code>general: null</code>"
                 )
                 
-            logger.info(f"📂 Запрос ID темы: группа '{chat_title}', thread_id = {thread_id}")
+                keyboard = [
+                    [{"text": "🤖 Автоматически добавить в конфиг", "callback_data": "auto_add_topic_general"}],
+                    [{"text": "📋 Только показать информацию", "callback_data": "no_action"}]
+                ]
+                
+            else:
+                # Конкретная тема
+                response_text = (
+                    f"🎯 <b>ID ТЕМЫ ПОЛУЧЕН!</b>\n\n"
+                    f"📂 <b>Группа:</b> {chat_title}\n"
+                    f"🏠 <b>Chat ID:</b> <code>{chat_id}</code>\n"
+                    f"📋 <b>Тема:</b> Текущая тема\n"
+                    f"🆔 <b>Topic ID:</b> <code>{thread_id}</code>\n\n"
+                    f"📝 <b>Выберите регион для автоматического добавления:</b>"
+                )
+                
+                # Загружаем список регионов из конфига
+                regions = await self.load_regions_from_config()
+                keyboard = []
+                
+                for region in regions:
+                    region_name = region['name']
+                    region_key = region['key']
+                    keyboard.append([{"text": f"{region['emoji']} {region_name}", "callback_data": f"auto_add_topic_{region_key}"}])
+                
+                keyboard.append([{"text": "📋 Только показать информацию", "callback_data": "no_action"}])
+            
+            await self.send_message_with_keyboard(response_text, keyboard, use_reply_keyboard=False)
+                
+            logger.info(f"📂 Topic ID запрос: группа '{chat_title}' (chat_id: {chat_id}), thread_id = {thread_id}")
                 
         except Exception as e:
             logger.error(f"❌ Ошибка команды topic_id: {e}")
             await self.send_message(f"❌ <b>Ошибка:</b> {e}")
+    
+    async def auto_add_topic_to_config(self, region_key: str):
+        """Автоматически добавить topic ID в конфиг"""
+        try:
+            if not hasattr(self, 'pending_topic_data') or not self.pending_topic_data:
+                await self.send_message("❌ <b>Ошибка:</b> Данные темы не найдены. Используйте /topic_id еще раз.")
+                return
+            
+            topic_data = self.pending_topic_data
+            thread_id = topic_data.get('thread_id')
+            chat_title = topic_data.get('chat_title', 'Unknown')
+            
+            # Читаем текущий config.yaml
+            config_path = "config/config.yaml"
+            
+            import yaml
+            with open(config_path, 'r', encoding='utf-8') as file:
+                config = yaml.safe_load(file)
+            
+            # Добавляем/обновляем topic ID
+            if 'output' not in config:
+                config['output'] = {}
+            if 'topics' not in config['output']:
+                config['output']['topics'] = {}
+            
+            # Устанавливаем значение
+            old_value = config['output']['topics'].get(region_key, 'не задано')
+            config['output']['topics'][region_key] = thread_id
+            
+            # Записываем обратно в файл
+            with open(config_path, 'w', encoding='utf-8') as file:
+                yaml.dump(config, file, default_flow_style=False, allow_unicode=True, indent=2)
+            
+            # Загружаем информацию о регионе
+            regions = await self.load_regions_from_config()
+            region_info = next((r for r in regions if r['key'] == region_key), {'name': region_key, 'emoji': '📂'})
+            
+            success_text = (
+                f"✅ <b>TOPIC ID АВТОМАТИЧЕСКИ ДОБАВЛЕН!</b>\n\n"
+                f"📂 <b>Группа:</b> {chat_title}\n"
+                f"{region_info['emoji']} <b>Регион:</b> {region_info['name']}\n"
+                f"🆔 <b>Topic ID:</b> <code>{thread_id}</code>\n\n"
+                f"📝 <b>Изменения в config.yaml:</b>\n"
+                f"<code>topics:\n  {region_key}: {thread_id}</code>\n\n"
+                f"⚠️ <b>Было:</b> {old_value}\n"
+                f"✅ <b>Стало:</b> {thread_id}\n\n"
+                f"🔄 <b>Требуется перезапуск бота для применения изменений!</b>"
+            )
+            
+            keyboard = [
+                [{"text": "🔄 Перезапустить бота", "callback_data": "restart"}],
+                [{"text": "🏠 Главное меню", "callback_data": "start"}]
+            ]
+            
+            await self.edit_message_with_keyboard(success_text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
+            
+            # Очищаем временные данные
+            self.pending_topic_data = None
+            
+            logger.info(f"✅ Topic ID добавлен в конфиг: {region_key} = {thread_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления topic ID в конфиг: {e}")
+            await self.edit_message_with_keyboard(
+                f"❌ <b>Ошибка добавления в конфиг:</b>\n{e}",
+                [[{"text": "🔙 Назад", "callback_data": "start"}]],
+                use_reply_keyboard=False,
+                chat_id=self.current_callback_chat_id
+            )
     
     async def show_region_selection(self):
         """Показать выбор региона для канала"""
