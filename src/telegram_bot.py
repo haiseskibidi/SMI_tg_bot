@@ -456,50 +456,8 @@ class TelegramBot:
                         if message_id and self.delete_commands:
                             await self.delete_user_message(message_id, chat_id)
                 else:
-                    # Обычное сообщение - проверяем кнопки клавиатуры
-                    if text == "📊 Статус":
-                        logger.info("📊 Нажата кнопка Статус")
-                        await self.cmd_status(message)
-                    elif text == "🗂️ Управление каналами":
-                        logger.info("🗂️ Нажата кнопка Управление каналами")
-                        await self.cmd_manage_channels(message)
-                    elif text == "📈 Статистика":
-                        logger.info("📈 Нажата кнопка Статистика")
-                        await self.cmd_stats(message)
-                    elif text == "➕ Добавить канал":
-                        logger.info("➕ Нажата кнопка Добавить канал")
-                        add_text = (
-                            "➕ <b>Добавление канала</b>\n\n"
-                            "Отправьте ссылку на канал в любом формате:\n"
-                            "• https://t.me/channel_name\n"
-                            "• @channel_name\n"
-                            "• /add_channel https://t.me/channel_name\n\n"
-                            "Канал будет автоматически добавлен в мониторинг!"
-                        )
-                        keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
-                        await self.edit_message_with_keyboard(add_text, keyboard, use_reply_keyboard=False)
-                    elif text == "📡 Принудительная подписка":
-                        logger.info("📡 Нажата кнопка Принудительная подписка")
-                        await self.cmd_force_subscribe(message)
-                    elif text == "🏠 Главное меню":
-                        logger.info("🏠 Нажата кнопка Главное меню")
-                        await self.cmd_start(message)
-                    elif text == "🆘 Справка":
-                        logger.info("🆘 Нажата кнопка Справка")
-                        await self.cmd_help(message)
-                    elif text == "🚀 Запуск":
-                        logger.info("🚀 Нажата кнопка Запуск")
-                        await self.cmd_start_monitoring(message)
-                    elif text == "🛑 Стоп":
-                        logger.info("🛑 Нажата кнопка Стоп")
-                        await self.cmd_stop_monitoring(message)
-                    elif text == "🔄 Рестарт":
-                        logger.info("🔄 Нажата кнопка Рестарт")
-                        await self.cmd_restart(message)
-                    elif text == "⚙️ Настройки":
-                        logger.info("⚙️ Нажата кнопка Настройки")
-                        await self.cmd_settings(message)
-                    elif message.get("forward_from_chat"):
+                    # Обычное сообщение (не команда)
+                    if message.get("forward_from_chat"):
                         # Пересланное сообщение из канала
                         logger.info("📤 Обрабатываем пересланное сообщение из канала")
                         await self.handle_forwarded_message(message)
@@ -1106,6 +1064,36 @@ class TelegramBot:
     
     # ==================== КОМАНДЫ БОТА ====================
     
+    async def remove_old_keyboard(self, to_group: bool = None):
+        """Удалить старую текстовую клавиатуру"""
+        try:
+            if to_group and self.group_chat_id:
+                target_chat_id = self.group_chat_id
+            elif to_group is False:
+                target_chat_id = self.admin_chat_id
+            else:
+                target_chat_id = self.group_chat_id if self.group_chat_id else self.admin_chat_id
+
+            url = f"{self.base_url}/sendMessage"
+            data = {
+                "chat_id": target_chat_id,
+                "text": "🔄 Обновление интерфейса...",
+                "reply_markup": json.dumps({"remove_keyboard": True})
+            }
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, data=data)
+                if response.status_code == 200:
+                    # Сразу удаляем это сообщение
+                    result = response.json()
+                    if result.get("ok") and "result" in result:
+                        message_id = result["result"]["message_id"]
+                        await asyncio.sleep(0.5)  # Небольшая задержка
+                        await self.delete_user_message(message_id, target_chat_id)
+                        
+        except Exception as e:
+            logger.debug(f"⚠️ Не удалось удалить старую клавиатуру: {e}")
+
     async def cmd_start(self, message):
         """Команда /start - главное меню"""
         # Определяем куда отправлять ответ
@@ -1135,6 +1123,9 @@ class TelegramBot:
             "⚙️ /settings - настройки интерфейса\n\n"
             "⌨️ <b>Или используйте кнопки ниже:</b>"
         )
+        
+        # Сначала удаляем старую клавиатуру если она есть
+        await self.remove_old_keyboard(to_group)
         
         await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=False, to_group=to_group)
     
