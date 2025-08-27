@@ -67,7 +67,6 @@ class TelegramBot:
         self.register_command("force_subscribe", self.cmd_force_subscribe)
         
         asyncio.create_task(self.setup_bot_commands())
-        asyncio.create_task(self.setup_main_keyboard())
     
     def is_admin_user(self, user_id: int) -> bool:
         """Проверка является ли пользователь админом"""
@@ -111,66 +110,6 @@ class TelegramBot:
                     
         except Exception as e:
             logger.error(f"❌ Ошибка установки команд: {e}")
-    
-    async def setup_main_keyboard(self):
-        """Установить основную постоянную клавиатуру"""
-        try:
-            main_keyboard = [
-                ["📊 Статус", "📈 Статистика"],
-                ["🗂️ Управление каналами", "➕ Добавить канал"],
-                ["🚀 Запуск", "🛑 Стоп", "🔄 Рестарт"],
-                ["⚙️ Настройки", "🆘 Справка"]
-            ]
-            
-            # Отправляем приветственное сообщение с клавиатурой админу
-            welcome_text = (
-                "🤖 <b>Панель управления активирована</b>\n\n"
-                "⌨️ Используйте кнопки внизу экрана для управления ботом\n\n"
-                "📋 Для получения полного меню команд нажмите /start"
-            )
-            
-            await self.send_message_with_keyboard(
-                welcome_text, 
-                main_keyboard, 
-                use_reply_keyboard=True,
-                to_group=True
-            )
-            
-            logger.info("✅ Основная клавиатура установлена")
-        except Exception as e:
-            logger.error(f"❌ Ошибка установки основной клавиатуры: {e}")
-    
-    async def handle_main_keyboard_button(self, button_text: str, message: dict):
-        """Обработка нажатия кнопки основной клавиатуры"""
-        try:
-            # Удаляем сообщение пользователя для чистоты чата
-            message_id = message.get("message_id")
-            chat_id = message.get("chat", {}).get("id")
-            if message_id and self.delete_commands:
-                await self.delete_user_message(message_id, chat_id)
-            
-            # Маппинг кнопок на команды
-            button_command_map = {
-                "📊 Статус": "status",
-                "📈 Статистика": "stats",
-                "🗂️ Управление каналами": "manage_channels",
-                "➕ Добавить канал": "add_channel",
-                "🚀 Запуск": "start_monitoring",
-                "🛑 Стоп": "stop_monitoring",
-                "🔄 Рестарт": "restart",
-                "⚙️ Настройки": "settings",
-                "🆘 Справка": "help"
-            }
-            
-            command = button_command_map.get(button_text)
-            if command and command in self.command_handlers:
-                logger.info(f"▶️ Выполняем команду {command} через кнопку")
-                await self.command_handlers[command](message)
-            else:
-                logger.warning(f"⚠️ Неизвестная кнопка: {button_text}")
-                
-        except Exception as e:
-            logger.error(f"❌ Ошибка обработки кнопки основной клавиатуры: {e}")
     
     async def send_message(self, text: str, parse_mode: str = "HTML", to_group: bool = True, to_user: int = None) -> bool:
         """Отправить сообщение в группу или конкретному пользователю"""
@@ -569,10 +508,7 @@ class TelegramBot:
                         logger.info(f"🎨 Получен пользовательский эмодзи: '{text}'")
                         self.waiting_for_emoji = False
                         await self.handle_custom_emoji_input(text)
-                    elif text in ["📊 Статус", "📈 Статистика", "🗂️ Управление каналами", "➕ Добавить канал", "🚀 Запуск", "🛑 Стоп", "🔄 Рестарт", "⚙️ Настройки", "🆘 Справка"]:
-                        # Обработка кнопок основной клавиатуры
-                        logger.info(f"🎛️ Нажата кнопка основной клавиатуры: '{text}'")
-                        await self.handle_main_keyboard_button(text, message)
+
                     elif any(keyword in text for keyword in ["t.me/", "@", "https://"]):
                         logger.info(f"🔗 Обрабатываем ссылки на каналы: {text}")
                         # Ищем все каналы в сообщении
