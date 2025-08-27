@@ -20,21 +20,18 @@ import yaml
 class TelegramBot:
     """Telegram бот для отправки уведомлений"""
     
-    def __init__(self, bot_token: str, chat_id: int, monitor_bot=None, allowed_users=None):
+    def __init__(self, bot_token: str, admin_chat_id: int, group_chat_id: int = None, monitor_bot=None):
         self.bot_token = bot_token
-        self.chat_id = chat_id  # Основной администратор
+        self.admin_chat_id = admin_chat_id  # Личный чат админа
+        self.group_chat_id = group_chat_id   # Группа для всех уведомлений
+        self.chat_id = admin_chat_id  # Обратная совместимость
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self.monitor_bot = monitor_bot
         self.main_instance = monitor_bot  # Алиас для обратной совместимости
         
-        # Список разрешенных пользователей
-        if allowed_users:
-            self.allowed_users = set(allowed_users)
-        else:
-            self.allowed_users = {chat_id}  # По умолчанию только основной admin
-        
-        logger.info(f"🤖 TelegramBot инициализирован для chat_id: {chat_id}")
-        logger.info(f"👥 Разрешенные пользователи: {len(self.allowed_users)} чел.")
+        logger.info(f"🤖 TelegramBot инициализирован:")
+        logger.info(f"👤 Админ: {admin_chat_id}")
+        logger.info(f"👥 Группа: {group_chat_id if group_chat_id else 'не настроена'}")
         
         # Для обработки команд
         self.update_offset = 0
@@ -70,9 +67,13 @@ class TelegramBot:
         
         asyncio.create_task(self.setup_bot_commands())
     
-    def is_user_authorized(self, user_id: int) -> bool:
-        """Проверка разрешений пользователя"""
-        return user_id in self.allowed_users
+    def is_admin_user(self, user_id: int) -> bool:
+        """Проверка является ли пользователь админом"""
+        return user_id == self.admin_chat_id
+    
+    def is_message_from_group(self, chat_id: int) -> bool:
+        """Проверка пришло ли сообщение из настроенной группы"""
+        return self.group_chat_id and chat_id == self.group_chat_id
     
     async def setup_bot_commands(self):
         try:
@@ -109,15 +110,22 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"❌ Ошибка установки команд: {e}")
     
-    async def send_message(self, text: str, parse_mode: str = "HTML", to_user: int = None) -> bool:
-        """Отправить сообщение (всем разрешенным пользователям или конкретному)"""
+    async def send_message(self, text: str, parse_mode: str = "HTML", to_group: bool = True, to_user: int = None) -> bool:
+        """Отправить сообщение в группу или конкретному пользователю"""
         try:
             if to_user:
                 # Отправляем конкретному пользователю
-                return await self._send_to_single_user(text, to_user, parse_mode)
+                target_chat_id = to_user
+            elif to_group and self.group_chat_id:
+                # Отправляем в группу
+                target_chat_id = self.group_chat_id
+                logger.info(f"📤 Отправляем сообщение в группу: {self.group_chat_id}")
             else:
-                # Отправляем всем разрешенным пользователям
-                return await self._broadcast_message(text, parse_mode)
+                # Отправляем админу в личку
+                target_chat_id = self.admin_chat_id
+                logger.info(f"📤 Отправляем сообщение админу: {self.admin_chat_id}")
+            
+            return await self._send_to_single_user(text, target_chat_id, parse_mode)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка отправки сообщения: {e}")
@@ -150,33 +158,21 @@ class TelegramBot:
             logger.error(f"❌ Ошибка отправки сообщения пользователю {chat_id}: {e}")
             return False
     
-    async def _broadcast_message(self, text: str, parse_mode: str = "HTML") -> bool:
-        """Отправка сообщения всем разрешенным пользователям"""
-        success_count = 0
-        total_users = len(self.allowed_users)
-        
-        for user_id in self.allowed_users:
-            if await self._send_to_single_user(text, user_id, parse_mode):
-                success_count += 1
-        
-        if success_count > 0:
-            logger.info(f"✅ Сообщение отправлено {success_count}/{total_users} пользователям")
-            return True
-        else:
-            logger.error(f"❌ Не удалось отправить сообщение ни одному пользователю")
-            return False
+
     
     async def send_system_notification(self, text: str, parse_mode: str = "HTML") -> bool:
-        """Отправка системного уведомления всем пользователям (запуск/остановка/ошибки)"""
-        return await self._broadcast_message(text, parse_mode)
+        """Отправка системного уведомления в группу (запуск/остановка/ошибки)"""
+        return await self.send_message(text, parse_mode, to_group=True)
     
     async def send_command_response(self, text: str, message: dict, parse_mode: str = "HTML") -> bool:
-        """Отправка ответа на команду конкретному пользователю"""
-        user_id = message.get("chat", {}).get("id") if message else self.chat_id
-        return await self._send_to_single_user(text, user_id, parse_mode)
+        """Отправка ответа на команду в тот же чат где была команда"""
+        chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
+        # Если команда пришла из группы - отвечаем в группу, иначе в личку
+        to_group = self.is_message_from_group(chat_id)
+        return await self.send_message(text, parse_mode, to_group=to_group)
     
-    async def send_message_with_keyboard(self, text: str, keyboard: list = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True, to_user: int = None) -> bool:
-        """Отправить сообщение с клавиатурой"""
+    async def send_message_with_keyboard(self, text: str, keyboard: list = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True, to_group: bool = None, to_user: int = None) -> bool:
+        """Отправить сообщение с клавиатурой в группу или конкретному пользователю"""
         try:
             # Если это inline кнопки - деактивируем старые
             if keyboard and not use_reply_keyboard:
@@ -184,10 +180,18 @@ class TelegramBot:
             
             if to_user:
                 # Отправляем конкретному пользователю
-                return await self._send_keyboard_to_user(text, keyboard, parse_mode, use_reply_keyboard, to_user)
+                target_chat_id = to_user
+            elif to_group and self.group_chat_id:
+                # Отправляем в группу
+                target_chat_id = self.group_chat_id
+            elif to_group is False:
+                # Явно в личку админу
+                target_chat_id = self.admin_chat_id
             else:
-                # Отправляем всем разрешенным пользователям
-                return await self._broadcast_keyboard(text, keyboard, parse_mode, use_reply_keyboard)
+                # По умолчанию в группу, если есть, иначе админу
+                target_chat_id = self.group_chat_id if self.group_chat_id else self.admin_chat_id
+            
+            return await self._send_keyboard_to_user(text, keyboard, parse_mode, use_reply_keyboard, target_chat_id)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка отправки сообщения с клавиатурой: {e}")
@@ -244,21 +248,7 @@ class TelegramBot:
             logger.error(f"❌ Ошибка отправки клавиатуры пользователю {user_id}: {e}")
             return False
     
-    async def _broadcast_keyboard(self, text: str, keyboard: list, parse_mode: str, use_reply_keyboard: bool) -> bool:
-        """Отправка клавиатуры всем разрешенным пользователям"""
-        success_count = 0
-        total_users = len(self.allowed_users)
-        
-        for user_id in self.allowed_users:
-            if await self._send_keyboard_to_user(text, keyboard, parse_mode, use_reply_keyboard, user_id):
-                success_count += 1
-        
-        if success_count > 0:
-            logger.info(f"✅ Клавиатура отправлена {success_count}/{total_users} пользователям")
-            return True
-        else:
-            logger.error(f"❌ Не удалось отправить клавиатуру ни одному пользователю")
-            return False
+
     
     async def edit_message_with_keyboard(self, text: str, keyboard: list = None, message_id: int = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True) -> bool:
         """Редактировать существующее сообщение"""
@@ -411,6 +401,7 @@ class TelegramBot:
                 chat_id = chat.get("id")
                 chat_type = chat.get("type")
                 chat_title = chat.get("title")
+                user_id = message.get("from", {}).get("id")  # Получаем ID отправителя
                 
                 # Логируем chat_id групп и message_thread_id тем для настройки
                 if chat_type in ["group", "supergroup"] and chat_title:
@@ -423,7 +414,8 @@ class TelegramBot:
                         logger.info(f"📂 Тема в группе '{chat_title}': message_thread_id = {thread_id}")
                         logger.info(f"💡 Для настройки добавьте в config.yaml topics: region_name: {thread_id}")
                 
-                if not self.is_user_authorized(chat_id):
+                # Разрешаем команды от админа (в личку) или от любого участника группы
+                if not (self.is_admin_user(user_id) or self.is_message_from_group(chat_id)):
                     return  # Игнорируем сообщения от неавторизованных пользователей
                     
                 text = message.get("text", "")
@@ -529,7 +521,10 @@ class TelegramBot:
             elif "callback_query" in update:
                 callback = update["callback_query"]
                 callback_user_id = callback.get("from", {}).get("id")
-                if not self.is_user_authorized(callback_user_id):
+                callback_chat_id = callback.get("message", {}).get("chat", {}).get("id")
+                
+                # Разрешаем callback от админа или из группы
+                if not (self.is_admin_user(callback_user_id) or self.is_message_from_group(callback_chat_id)):
                     return
                     
                 callback_data = callback.get("data", "")
@@ -3010,18 +3005,14 @@ async def create_bot_from_config(config: Dict, monitor_bot=None) -> Optional[Tel
             return None
         
         token = bot_config.get('token')
-        chat_id = bot_config.get('chat_id')
-        allowed_users = bot_config.get('allowed_users', [])
+        admin_chat_id = bot_config.get('chat_id')
+        group_chat_id = bot_config.get('group_chat_id')  # Новый параметр
         
-        if not token or not chat_id:
+        if not token or not admin_chat_id:
             logger.error("❌ Не указан токен бота или chat_id")
             return None
         
-        # Убеждаемся что основной admin всегда в списке разрешенных
-        if allowed_users and chat_id not in allowed_users:
-            allowed_users.append(chat_id)
-        
-        bot = TelegramBot(token, chat_id, monitor_bot, allowed_users)
+        bot = TelegramBot(token, admin_chat_id, group_chat_id, monitor_bot)
         
         # Тестируем подключение
         if await bot.test_connection():

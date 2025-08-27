@@ -115,6 +115,7 @@ class NewsMonitorWithBot:
             # Переопределяем секретные данные из переменных окружения
             bot_token = os.getenv('BOT_TOKEN')
             bot_chat_id = os.getenv('BOT_CHAT_ID')
+            bot_group_chat_id = os.getenv('BOT_GROUP_CHAT_ID')  # Новый параметр
             api_id = os.getenv('TELEGRAM_API_ID')
             api_hash = os.getenv('TELEGRAM_API_HASH')
             target_group = os.getenv('TARGET_GROUP_ID')
@@ -125,20 +126,16 @@ class NewsMonitorWithBot:
                 self.config.setdefault('bot', {})['token'] = bot_token
             if bot_chat_id:
                 self.config.setdefault('bot', {})['chat_id'] = int(bot_chat_id)
+            if bot_group_chat_id:
+                self.config.setdefault('bot', {})['group_chat_id'] = int(bot_group_chat_id)
+                logger.info(f"👥 Настроена групповая отправка: {bot_group_chat_id}")
             if api_id:
                 self.config.setdefault('telegram', {})['api_id'] = int(api_id)
             if api_hash:
                 self.config.setdefault('telegram', {})['api_hash'] = api_hash
             if target_group:
                 self.config.setdefault('output', {})['target_group'] = int(target_group)
-            if bot_allowed_users:
-                # Парсим список chat_id из строки вида "123,456,789"
-                try:
-                    user_ids = [int(uid.strip()) for uid in bot_allowed_users.split(',') if uid.strip()]
-                    self.config.setdefault('bot', {})['allowed_users'] = user_ids
-                    logger.info(f"👥 Загружено {len(user_ids)} разрешенных пользователей из .env")
-                except ValueError as e:
-                    logger.error(f"❌ Ошибка парсинга BOT_ALLOWED_USERS: {e}")
+
             
             # Проверяем наличие конфигурации бота
             if 'bot' not in self.config:
