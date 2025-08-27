@@ -361,7 +361,16 @@ class TelegramBot:
                 if response.status_code == 200:
                     result = response.json()
                     if result["ok"]:
-                        return result["result"]
+                        updates = result["result"]
+                        # Если телеграм вернул пустой массив, ничего не меняем
+                        if not updates:
+                            return []
+                        
+                        # Страхуемся от пропуска апдейтов: сдвигаем offset на max(update_id)+1 сразу
+                        last_update_id = max(update.get("update_id", 0) for update in updates)
+                        if last_update_id >= self.update_offset:
+                            self.update_offset = last_update_id + 1
+                        return updates
                 return []
                 
         except Exception as e:
@@ -385,8 +394,10 @@ class TelegramBot:
     async def process_update(self, update: dict):
         """Обработка одного обновления"""
         try:
-            # Обновляем offset
-            self.update_offset = update["update_id"] + 1
+            # Обновляем offset (на случай если getUpdates не успел сдвинуть)
+            update_id = update.get("update_id", 0)
+            if update_id >= self.update_offset:
+                self.update_offset = update_id + 1
             
             logger.info(f"🔄 Обрабатываем обновление: {list(update.keys())}")
             
@@ -575,15 +586,19 @@ class TelegramBot:
                 "no_action",  # Неактивные кнопки
             ]
             
-            # Также не убираем кнопки для навигационных callback'ов
-            navigation_prefixes = [
-                "region_page_",  # Навигация по страницам регионов
-                "channels_page_",  # Навигация по страницам каналов  
+            # Также не убираем кнопки для навигационных callback'ов и действий по регионам
+            keep_prefixes = [
+                "region_page_",      # Навигация по страницам регионов
+                "channels_page_",    # Навигация по страницам каналов
+                "manage_region_",    # Открытие конкретного региона
+                "delete_channel_",   # Просмотр подтверждения удаления
+                "confirm_delete_",   # Подтверждение удаления
+                "region_"            # Выбор региона для добавления канала
             ]
             
-            is_navigation = any(data.startswith(prefix) for prefix in navigation_prefixes)
+            keep_by_prefix = any(data.startswith(prefix) for prefix in keep_prefixes)
             
-            if current_message_id and data not in keep_buttons_callbacks and not is_navigation:
+            if current_message_id and data not in keep_buttons_callbacks and not keep_by_prefix:
                 try:
                     # Убираем кнопки из текущего сообщения  
                     callback_chat_id = callback_query.get("message", {}).get("chat", {}).get("id", self.chat_id)
@@ -1311,7 +1326,7 @@ class TelegramBot:
             
             text += "⚠️ <b>Осторожно:</b> удаление канала необратимо!"
             
-            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False)
+            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
             
         except Exception as e:
             logger.error(f"❌ Ошибка показа каналов региона: {e}")
@@ -1360,7 +1375,7 @@ class TelegramBot:
                 ]
             ]
             
-            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False)
+            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
             
         except Exception as e:
             logger.error(f"❌ Ошибка показа подтверждения удаления: {e}")
@@ -1726,7 +1741,7 @@ class TelegramBot:
             
             text += "\n💡 Не нашли подходящий? Создайте новый регион!"
             
-            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False)
+            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
             
         except Exception as e:
             logger.error(f"❌ Ошибка показа выбора региона: {e}")
@@ -2688,10 +2703,18 @@ class TelegramBot:
         try:
             while self.is_listening:
                 updates = await self.get_updates()
+                if not updates:
+                    # Ничего не пришло — продолжим без задержки (long polling уже ждёт)
+                    continue
+                
+                # Обрабатываем по одному, безопасно увеличивая offset только после успешной обработки
                 for update in updates:
-                    await self.process_update(update)
-                    
-                await asyncio.sleep(1)  # Небольшая пауза между запросами
+                    try:
+                        await self.process_update(update)
+                    except Exception as process_error:
+                        logger.error(f"❌ Ошибка обработки обновления: {process_error}")
+                        # Не повышаем offset вручную — он уже обновлён в process_update
+                        # Продолжаем обработку следующих апдейтов
                 
         except Exception as e:
             logger.error(f"❌ Ошибка в цикле прослушивания: {e}")
