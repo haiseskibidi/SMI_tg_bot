@@ -1099,21 +1099,26 @@ class TelegramBot:
                     [{"text": "🏠 Главное меню", "callback_data": "start"}]
                 ]
                 
-                await self.edit_message_with_keyboard(
+                # Определяем куда отправлять ответ
+                chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
+                to_group = self.is_message_from_group(chat_id) if chat_id else None
+                
+                await self.send_message_with_keyboard(
                     "📂 <b>Управление каналами</b>\n\n"
                     "❌ Каналы не найдены\n\n"
                     "Добавьте первый канал для мониторинга!",
                     keyboard,
-                    use_reply_keyboard=False
+                    use_reply_keyboard=False,
+                    to_group=to_group
                 )
                 return
             
             # Показываем список каналов по регионам
-            await self.show_channels_management(channels_data)
+            await self.show_channels_management(channels_data, message)
             
         except Exception as e:
             logger.error(f"❌ Ошибка управления каналами: {e}")
-            await self.send_message("❌ Произошла ошибка при загрузке каналов")
+            await self.send_command_response("❌ Произошла ошибка при загрузке каналов", message)
     
     async def get_all_channels_grouped(self):
         """Получить все каналы, сгруппированные по регионам"""
@@ -1166,7 +1171,7 @@ class TelegramBot:
             logger.error(f"❌ Ошибка группировки каналов: {e}")
             return {}
     
-    async def show_channels_management(self, channels_data):
+    async def show_channels_management(self, channels_data, message=None):
         """Показать управление каналами с возможностью удаления"""
         try:
             text = "🗂️ <b>Управление каналами</b>\n\n"
@@ -1197,7 +1202,11 @@ class TelegramBot:
             
             text += "👇 Выберите регион для управления каналами:"
             
-            await self.edit_message_with_keyboard(text, keyboard, use_reply_keyboard=False)
+            # Определяем куда отправлять ответ
+            chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
+            to_group = self.is_message_from_group(chat_id) if chat_id else None
+            
+            await self.send_message_with_keyboard(text, keyboard, use_reply_keyboard=False, to_group=to_group)
             
         except Exception as e:
             logger.error(f"❌ Ошибка показа управления каналами: {e}")
@@ -1502,11 +1511,15 @@ class TelegramBot:
                 [{"text": "🏠 Главное меню", "callback_data": "start"}]
             ]
             
-            await self.edit_message_with_keyboard(status_text, keyboard, use_reply_keyboard=False)
+            # Определяем куда отправлять ответ
+            chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
+            to_group = self.is_message_from_group(chat_id) if chat_id else None
+            
+            await self.send_message_with_keyboard(status_text, keyboard, use_reply_keyboard=False, to_group=to_group)
             
         except Exception as e:
             logger.error(f"❌ Ошибка команды status: {e}")
-            await self.send_message("❌ Ошибка получения статуса")
+            await self.send_command_response("❌ Ошибка получения статуса", message)
     
     async def cmd_start_monitoring(self, message):
         """Команда /start_monitoring - запустить мониторинг"""
@@ -2389,11 +2402,15 @@ class TelegramBot:
                 ]
             ]
             
-            await self.edit_message_with_keyboard(stats_text, keyboard, use_reply_keyboard=False)
+            # Определяем куда отправлять ответ
+            chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
+            to_group = self.is_message_from_group(chat_id) if chat_id else None
+            
+            await self.send_message_with_keyboard(stats_text, keyboard, use_reply_keyboard=False, to_group=to_group)
             
         except Exception as e:
             logger.error(f"❌ Ошибка команды stats: {e}")
-            await self.send_message("❌ Ошибка получения статистики")
+            await self.send_command_response("❌ Ошибка получения статистики", message)
     
     async def clear_stats_handler(self):
         """Обработчик очистки статистики"""
