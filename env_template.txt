@@ -4,3 +4,4 @@ BOT_CHAT_ID=your_chat_id_here
 TELEGRAM_API_ID=your_api_id_here
 TELEGRAM_API_HASH=your_api_hash_here
 TARGET_GROUP_ID=your_target_group_id_here
+BOT_ALLOWED_USERS=your_chat_id_here,1234567890

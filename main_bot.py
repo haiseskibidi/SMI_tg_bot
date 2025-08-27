@@ -118,6 +118,7 @@ class NewsMonitorWithBot:
             api_id = os.getenv('TELEGRAM_API_ID')
             api_hash = os.getenv('TELEGRAM_API_HASH')
             target_group = os.getenv('TARGET_GROUP_ID')
+            bot_allowed_users = os.getenv('BOT_ALLOWED_USERS')
             
             # Обновляем конфигурацию из переменных окружения (приоритет над файлом)
             if bot_token:
@@ -130,6 +131,14 @@ class NewsMonitorWithBot:
                 self.config.setdefault('telegram', {})['api_hash'] = api_hash
             if target_group:
                 self.config.setdefault('output', {})['target_group'] = int(target_group)
+            if bot_allowed_users:
+                # Парсим список chat_id из строки вида "123,456,789"
+                try:
+                    user_ids = [int(uid.strip()) for uid in bot_allowed_users.split(',') if uid.strip()]
+                    self.config.setdefault('bot', {})['allowed_users'] = user_ids
+                    logger.info(f"👥 Загружено {len(user_ids)} разрешенных пользователей из .env")
+                except ValueError as e:
+                    logger.error(f"❌ Ошибка парсинга BOT_ALLOWED_USERS: {e}")
             
             # Проверяем наличие конфигурации бота
             if 'bot' not in self.config:

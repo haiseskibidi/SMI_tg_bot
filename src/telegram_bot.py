@@ -20,14 +20,21 @@ import yaml
 class TelegramBot:
     """Telegram бот для отправки уведомлений"""
     
-    def __init__(self, bot_token: str, chat_id: int, monitor_bot=None):
+    def __init__(self, bot_token: str, chat_id: int, monitor_bot=None, allowed_users=None):
         self.bot_token = bot_token
-        self.chat_id = chat_id
+        self.chat_id = chat_id  # Основной администратор
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self.monitor_bot = monitor_bot
         self.main_instance = monitor_bot  # Алиас для обратной совместимости
         
+        # Список разрешенных пользователей
+        if allowed_users:
+            self.allowed_users = set(allowed_users)
+        else:
+            self.allowed_users = {chat_id}  # По умолчанию только основной admin
+        
         logger.info(f"🤖 TelegramBot инициализирован для chat_id: {chat_id}")
+        logger.info(f"👥 Разрешенные пользователи: {len(self.allowed_users)} чел.")
         
         # Для обработки команд
         self.update_offset = 0
@@ -36,6 +43,8 @@ class TelegramBot:
         self.last_message_id = None  # Для редактирования сообщений
         self.edit_messages = True  # Режим редактирования сообщений (True = редактировать, False = новые сообщения)
         self.delete_commands = True  # Удалять команды пользователя
+        
+        # Дополнительные переменные для обработки команд
         self.start_time = None  # Время запуска бота для игнорирования старых команд
         self.pending_channel_url = None  # Сохраняем URL канала для выбора региона
         self.pending_channels_list = []  # Список каналов для массового добавления
@@ -60,6 +69,10 @@ class TelegramBot:
         self.register_command("force_subscribe", self.cmd_force_subscribe)
         
         asyncio.create_task(self.setup_bot_commands())
+    
+    def is_user_authorized(self, user_id: int) -> bool:
+        """Проверка разрешений пользователя"""
+        return user_id in self.allowed_users
     
     async def setup_bot_commands(self):
         try:
@@ -344,8 +357,8 @@ class TelegramBot:
                         logger.info(f"📂 Тема в группе '{chat_title}': message_thread_id = {thread_id}")
                         logger.info(f"💡 Для настройки добавьте в config.yaml topics: region_name: {thread_id}")
                 
-                if chat_id != self.chat_id:
-                    return  # Игнорируем сообщения не от нашего пользователя
+                if not self.is_user_authorized(chat_id):
+                    return  # Игнорируем сообщения от неавторизованных пользователей
                     
                 text = message.get("text", "")
                 message_id = message.get("message_id")
@@ -449,7 +462,8 @@ class TelegramBot:
             # Обрабатываем callback query (нажатия кнопок)
             elif "callback_query" in update:
                 callback = update["callback_query"]
-                if callback.get("from", {}).get("id") != self.chat_id:
+                callback_user_id = callback.get("from", {}).get("id")
+                if not self.is_user_authorized(callback_user_id):
                     return
                     
                 callback_data = callback.get("data", "")
@@ -2928,12 +2942,17 @@ async def create_bot_from_config(config: Dict, monitor_bot=None) -> Optional[Tel
         
         token = bot_config.get('token')
         chat_id = bot_config.get('chat_id')
+        allowed_users = bot_config.get('allowed_users', [])
         
         if not token or not chat_id:
             logger.error("❌ Не указан токен бота или chat_id")
             return None
         
-        bot = TelegramBot(token, chat_id, monitor_bot)
+        # Убеждаемся что основной admin всегда в списке разрешенных
+        if allowed_users and chat_id not in allowed_users:
+            allowed_users.append(chat_id)
+        
+        bot = TelegramBot(token, chat_id, monitor_bot, allowed_users)
         
         # Тестируем подключение
         if await bot.test_connection():

@@ -4,7 +4,8 @@ telegram:
 monitoring: null
 bot:
   token: YOUR_BOT_TOKEN_FROM_ENV
-  chat_id: YOUR_CHAT_ID_FROM_ENV
+  chat_id: YOUR_CHAT_ID_FROM_ENV  # Основной администратор
+  # allowed_users загружается из переменной окружения BOT_ALLOWED_USERS
 output:
   target_group: YOUR_TARGET_GROUP_FROM_ENV
   topics:
