@@ -602,18 +602,24 @@ class TelegramBot:
                 except Exception as e:
                     logger.debug(f"⚠️ Не удалось убрать кнопки из сообщения {current_message_id}: {e}")
             
-            # Обрабатываем действие
+            # Создаем псевдо-message объект из callback для правильной обработки
+            callback_message = {
+                "chat": callback_query.get("message", {}).get("chat", {}),
+                "from": callback_query.get("from", {})
+            }
+            
+            # Обрабатываем действие  
             if data == "start":
-                await self.cmd_start(None)
+                await self.cmd_start(callback_message)
             elif data == "status":
-                await self.cmd_status(None)
+                await self.cmd_status(callback_message)
             elif data == "channels":
-                await self.cmd_manage_channels(None)
+                await self.cmd_manage_channels(callback_message)
             elif data.startswith("channels_page_"):
                 page = int(data.replace("channels_page_", ""))
                 await self.show_channels_page(page)
             elif data == "stats":
-                await self.cmd_stats(None)
+                await self.cmd_stats(callback_message)
             elif data == "add_channel":
                 add_text = (
                     "➕ <b>Добавление канала</b>\n\n"
@@ -630,10 +636,10 @@ class TelegramBot:
                 await self.remove_channel_handler(channel_name)
             elif data == "toggle_delete":
                 self.delete_commands = not self.delete_commands
-                await self.cmd_settings(None)
+                await self.cmd_settings(callback_message)
             elif data == "toggle_edit":
                 self.edit_messages = not self.edit_messages
-                await self.cmd_settings(None)
+                await self.cmd_settings(callback_message)
             elif data == "clear_stats":
                 await self.clear_stats_handler()
             elif data.startswith("region_bulk_"):
@@ -668,11 +674,11 @@ class TelegramBot:
                 self.waiting_for_region_name = False
                 self.waiting_for_emoji = False
                 self.pending_region_data = None
-                await self.cmd_start(None)
+                await self.cmd_start(callback_message)
             elif data == "manage_channels":
-                await self.cmd_manage_channels(None)
+                await self.cmd_manage_channels(callback_message)
             elif data == "refresh_channels":
-                await self.cmd_manage_channels(None)
+                await self.cmd_manage_channels(callback_message)
             elif data.startswith("manage_region_"):
                 region_key = data.replace("manage_region_", "")
                 await self.show_region_channels(region_key)
@@ -1051,8 +1057,9 @@ class TelegramBot:
     
     async def cmd_start(self, message):
         """Команда /start - главное меню"""
-        # Получаем chat_id отправителя
-        user_id = message.get("chat", {}).get("id") if message else self.chat_id
+        # Определяем куда отправлять ответ
+        chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
+        to_group = self.is_message_from_group(chat_id) if chat_id else None
         
         keyboard = [
             ["📊 Статус", "🗂️ Управление каналами"],
@@ -1078,7 +1085,7 @@ class TelegramBot:
             "⌨️ <b>Или используйте кнопки снизу:</b>"
         )
         
-        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=True, to_user=user_id)
+        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=True, to_group=to_group)
     
     async def cmd_manage_channels(self, message):
         """Команда для управления каналами"""
