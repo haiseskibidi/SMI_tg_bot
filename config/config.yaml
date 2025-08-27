@@ -12,6 +12,7 @@ output:
     kamchatka: 5
     sakhalin: 2
     chita: 32
+    yakutsk: 890
     general: null
 regions:
   sakhalin:
