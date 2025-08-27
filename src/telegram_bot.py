@@ -67,6 +67,7 @@ class TelegramBot:
         self.register_command("force_subscribe", self.cmd_force_subscribe)
         
         asyncio.create_task(self.setup_bot_commands())
+        asyncio.create_task(self.setup_main_keyboard())
     
     def is_admin_user(self, user_id: int) -> bool:
         """Проверка является ли пользователь админом"""
@@ -111,6 +112,66 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"❌ Ошибка установки команд: {e}")
     
+    async def setup_main_keyboard(self):
+        """Установить основную постоянную клавиатуру"""
+        try:
+            main_keyboard = [
+                ["📊 Статус", "📈 Статистика"],
+                ["🗂️ Управление каналами", "➕ Добавить канал"],
+                ["🚀 Запуск", "🛑 Стоп", "🔄 Рестарт"],
+                ["⚙️ Настройки", "🆘 Справка"]
+            ]
+            
+            # Отправляем приветственное сообщение с клавиатурой админу
+            welcome_text = (
+                "🤖 <b>Панель управления активирована</b>\n\n"
+                "⌨️ Используйте кнопки внизу экрана для управления ботом\n\n"
+                "📋 Для получения полного меню команд нажмите /start"
+            )
+            
+            await self.send_message_with_keyboard(
+                welcome_text, 
+                main_keyboard, 
+                use_reply_keyboard=True,
+                to_group=False
+            )
+            
+            logger.info("✅ Основная клавиатура установлена")
+        except Exception as e:
+            logger.error(f"❌ Ошибка установки основной клавиатуры: {e}")
+    
+    async def handle_main_keyboard_button(self, button_text: str, message: dict):
+        """Обработка нажатия кнопки основной клавиатуры"""
+        try:
+            # Удаляем сообщение пользователя для чистоты чата
+            message_id = message.get("message_id")
+            chat_id = message.get("chat", {}).get("id")
+            if message_id and self.delete_commands:
+                await self.delete_user_message(message_id, chat_id)
+            
+            # Маппинг кнопок на команды
+            button_command_map = {
+                "📊 Статус": "status",
+                "📈 Статистика": "stats",
+                "🗂️ Управление каналами": "manage_channels",
+                "➕ Добавить канал": "add_channel",
+                "🚀 Запуск": "start_monitoring",
+                "🛑 Стоп": "stop_monitoring",
+                "🔄 Рестарт": "restart",
+                "⚙️ Настройки": "settings",
+                "🆘 Справка": "help"
+            }
+            
+            command = button_command_map.get(button_text)
+            if command and command in self.command_handlers:
+                logger.info(f"▶️ Выполняем команду {command} через кнопку")
+                await self.command_handlers[command](message)
+            else:
+                logger.warning(f"⚠️ Неизвестная кнопка: {button_text}")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки кнопки основной клавиатуры: {e}")
+    
     async def send_message(self, text: str, parse_mode: str = "HTML", to_group: bool = True, to_user: int = None) -> bool:
         """Отправить сообщение в группу или конкретному пользователю"""
         try:
@@ -145,7 +206,7 @@ class TelegramBot:
             
             if parse_mode:
                 data["parse_mode"] = parse_mode
-                
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, data=data)
                 
@@ -238,7 +299,8 @@ class TelegramBot:
                         
                         # Если это inline кнопки - добавляем в список активных
                         if keyboard and not use_reply_keyboard:
-                            self.active_inline_messages.append(message_id)
+                            message_info = {'message_id': message_id, 'chat_id': user_id}
+                            self.active_inline_messages.append(message_info)
                     
                     return True
                 else:
@@ -288,11 +350,22 @@ class TelegramBot:
                 if response.status_code == 200:
                     # Если это inline кнопки - обновляем список активных сообщений
                     if keyboard and not use_reply_keyboard:
-                        if msg_id not in self.active_inline_messages:
-                            self.active_inline_messages.append(msg_id)
-                    elif not keyboard and msg_id in self.active_inline_messages:
+                        message_info = {'message_id': msg_id, 'chat_id': target_chat_id}
+                        # Проверяем, что сообщение ещё не в списке
+                        existing = any(
+                            (isinstance(item, dict) and item.get('message_id') == msg_id) or 
+                            (isinstance(item, int) and item == msg_id) 
+                            for item in self.active_inline_messages
+                        )
+                        if not existing:
+                            self.active_inline_messages.append(message_info)
+                    elif not keyboard:
                         # Если убираем кнопки - удаляем из активных
-                        self.active_inline_messages.remove(msg_id)
+                        self.active_inline_messages = [
+                            item for item in self.active_inline_messages 
+                            if not ((isinstance(item, dict) and item.get('message_id') == msg_id) or
+                                   (isinstance(item, int) and item == msg_id))
+                        ]
                     
                     logger.info("✅ Сообщение отредактировано")
                     return True
@@ -306,39 +379,64 @@ class TelegramBot:
             # Если редактирование не удалось, отправляем новое сообщение
             return await self.send_message_with_keyboard(text, keyboard, parse_mode, use_reply_keyboard)
     
-    async def deactivate_old_inline_messages(self):
+    async def deactivate_old_inline_messages(self, exclude_message_id: int = None):
         """Деактивировать старые сообщения с inline кнопками"""
         try:
-            for message_id in self.active_inline_messages.copy():
+            messages_to_remove = []
+            
+            for message_data in self.active_inline_messages.copy():
+                # Обработка старого формата (только message_id) и нового (с chat_id)
+                if isinstance(message_data, dict):
+                    message_id = message_data.get('message_id')
+                    chat_id = message_data.get('chat_id', self.chat_id)
+                else:
+                    # Старый формат - только message_id
+                    message_id = message_data
+                    chat_id = self.chat_id
+                
+                # Пропускаем сообщение, которое нужно исключить
+                if exclude_message_id and message_id == exclude_message_id:
+                    continue
+                    
                 try:
                     url = f"{self.base_url}/editMessageReplyMarkup"
                     data = {
-                        "chat_id": self.chat_id,  # В этом методе используем админский чат (для старых сообщений)
+                        "chat_id": chat_id,
                         "message_id": message_id,
                         "reply_markup": ""  # Убираем кнопки
                     }
                     
-                    async with httpx.AsyncClient(timeout=10.0) as client:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
                         response = await client.post(url, data=data)
+                        
                         if response.status_code == 200:
                             result = response.json()
                             if result.get("ok"):
-                                logger.debug(f"✅ Убраны кнопки из сообщения {message_id}")
-                                self.active_inline_messages.remove(message_id)
+                                logger.debug(f"✅ Кнопки убраны с сообщения {message_id}")
+                                messages_to_remove.append(message_data)
                             else:
-                                # Если сообщение не найдено - удаляем из списка
-                                if "message not found" in str(result.get("description", "")).lower():
-                                    self.active_inline_messages.remove(message_id)
+                                logger.debug(f"⚠️ Не удалось убрать кнопки: {result.get('description')}")
+                                # Удаляем из списка даже при ошибке (возможно, сообщение уже удалено)
+                                messages_to_remove.append(message_data)
                         else:
-                            # Убираем из списка если HTTP ошибка
-                            self.active_inline_messages.remove(message_id)
+                            logger.debug(f"❌ HTTP ошибка {response.status_code}")
+                            messages_to_remove.append(message_data)  # Удаляем при любой ошибке
+                            
                 except Exception as e:
-                    logger.debug(f"⚠️ Не удалось убрать кнопки из сообщения {message_id}: {e}")
-                    # Убираем проблемное сообщение из списка
-                    if message_id in self.active_inline_messages:
-                        self.active_inline_messages.remove(message_id)
+                    logger.debug(f"❌ Ошибка деактивации сообщения {message_id}: {e}")
+                    # Удаляем сообщение из списка даже при ошибке
+                    messages_to_remove.append(message_data)
+            
+            # Удаляем обработанные сообщения из списка
+            for message_data in messages_to_remove:
+                if message_data in self.active_inline_messages:
+                    self.active_inline_messages.remove(message_data)
+            
+            if messages_to_remove:
+                logger.info(f"🧹 Очищено {len(messages_to_remove)} старых inline кнопок")
+                    
         except Exception as e:
-            logger.debug(f"❌ Ошибка деактивации inline сообщений: {e}")
+            logger.error(f"❌ Ошибка деактивации старых кнопок: {e}")
     
     def register_command(self, command: str, handler):
         """Регистрация обработчика команды"""
@@ -486,6 +584,10 @@ class TelegramBot:
                         logger.info(f"🎨 Получен пользовательский эмодзи: '{text}'")
                         self.waiting_for_emoji = False
                         await self.handle_custom_emoji_input(text)
+                    elif text in ["📊 Статус", "📈 Статистика", "🗂️ Управление каналами", "➕ Добавить канал", "🚀 Запуск", "🛑 Стоп", "🔄 Рестарт", "⚙️ Настройки", "🆘 Справка"]:
+                        # Обработка кнопок основной клавиатуры
+                        logger.info(f"🎛️ Нажата кнопка основной клавиатуры: '{text}'")
+                        await self.handle_main_keyboard_button(text, message)
                     else:
                         logger.info(f"❓ Неизвестное сообщение: '{text}'")
                         await self.send_message("ℹ️ Используйте кнопки снизу или отправьте ссылку на канал.\nДля справки: /help")
@@ -592,9 +694,12 @@ class TelegramBot:
                         if response.status_code == 200:
                             result = response.json()
                             if result.get("ok"):
-                                # Удаляем из списка активных inline сообщений
-                                if current_message_id in self.active_inline_messages:
-                                    self.active_inline_messages.remove(current_message_id)
+                                # Удаляем из списка активных inline сообщений (оба формата)
+                                self.active_inline_messages = [
+                                    item for item in self.active_inline_messages 
+                                    if not ((isinstance(item, dict) and item.get('message_id') == current_message_id) or
+                                           (isinstance(item, int) and item == current_message_id))
+                                ]
                         
                 except Exception as e:
                     logger.debug(f"⚠️ Не удалось убрать кнопки из сообщения {current_message_id}: {e}")
