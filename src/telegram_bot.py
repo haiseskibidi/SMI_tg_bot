@@ -583,7 +583,20 @@ class TelegramBot:
             
             # Список callback'ов где кнопки НЕ убираются (для навигации)
             keep_buttons_callbacks = [
-                "no_action",  # Неактивные кнопки
+                "no_action",         # Неактивные кнопки
+                "add_channel",       # Добавление канала
+                "settings",          # Настройки
+                "help",             # Справка
+                "stats",            # Статистика
+                "status",           # Статус
+                "start",            # Главное меню
+                "manage_channels",   # Управление каналами
+                "refresh_channels",  # Обновление списка каналов
+                "clear_stats",       # Очистка статистики
+                "start_monitoring",  # Запуск мониторинга
+                "stop_monitoring",   # Остановка мониторинга
+                "restart",          # Рестарт системы
+                "force_subscribe",   # Принудительная подписка
             ]
             
             # Также не убираем кнопки для навигационных callback'ов и действий по регионам
@@ -665,6 +678,18 @@ class TelegramBot:
                 await self.cmd_settings(callback_message)
             elif data == "clear_stats":
                 await self.clear_stats_handler()
+            elif data == "settings":
+                await self.cmd_settings(callback_message)
+            elif data == "help":
+                await self.cmd_help(callback_message)
+            elif data == "start_monitoring":
+                await self.cmd_start_monitoring(callback_message)
+            elif data == "stop_monitoring":
+                await self.cmd_stop_monitoring(callback_message)
+            elif data == "restart":
+                await self.cmd_restart(callback_message)
+            elif data == "force_subscribe":
+                await self.cmd_force_subscribe(callback_message)
             elif data.startswith("region_bulk_"):
                 region = data.replace("region_bulk_", "")
                 await self.handle_bulk_region_selection(region)
@@ -1088,11 +1113,11 @@ class TelegramBot:
         to_group = self.is_message_from_group(chat_id) if chat_id else None
         
         keyboard = [
-            ["📊 Статус", "🗂️ Управление каналами"],
-            ["📈 Статистика", "➕ Добавить канал"],
-            ["🚀 Запуск", "🛑 Стоп"],
-            ["🔄 Рестарт", "⚙️ Настройки"],
-            ["📡 Принудительная подписка", "🆘 Справка"]
+            [{"text": "📊 Статус", "callback_data": "status"}, {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
+            [{"text": "📈 Статистика", "callback_data": "stats"}, {"text": "➕ Добавить канал", "callback_data": "add_channel"}],
+            [{"text": "🚀 Запуск", "callback_data": "start_monitoring"}, {"text": "🛑 Стоп", "callback_data": "stop_monitoring"}],
+            [{"text": "🔄 Рестарт", "callback_data": "restart"}, {"text": "⚙️ Настройки", "callback_data": "settings"}],
+            [{"text": "📡 Принудительная подписка", "callback_data": "force_subscribe"}, {"text": "🆘 Справка", "callback_data": "help"}]
         ]
         
         welcome_text = (
@@ -1108,10 +1133,10 @@ class TelegramBot:
             "📂 /topic_id - узнать ID темы в группе\n"
             "📡 /force_subscribe - принудительная подписка на каналы\n"
             "⚙️ /settings - настройки интерфейса\n\n"
-            "⌨️ <b>Или используйте кнопки снизу:</b>"
+            "⌨️ <b>Или используйте кнопки ниже:</b>"
         )
         
-        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=True, to_group=to_group)
+        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=False, to_group=to_group)
     
     async def cmd_manage_channels(self, message):
         """Команда для управления каналами"""
