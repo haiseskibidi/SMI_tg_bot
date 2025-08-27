@@ -518,8 +518,8 @@ class NewsMonitorWithBot:
                 logger.warning(f"⚠️ Веб-интерфейс недоступен: {e}")
                 logger.info("💡 Установите Flask: pip install flask")
             
-            # Отправляем уведомление о запуске
-            await self.telegram_bot.send_message(
+            # Отправляем уведомление о запуске ВСЕМ пользователям
+            await self.telegram_bot.send_system_notification(
                 "🚀 <b>Система мониторинга запущена!</b>\n\n"
                 f"📱 Telegram бот: ✅ Активен\n"
                 f"🗄️ База данных: ✅ Подключена\n" 
@@ -1781,7 +1781,7 @@ class NewsMonitorWithBot:
             logger.info(f"✅ Автоочистка завершена. Осталось сообщений: {messages_count}")
             
             # Уведомляем в Telegram
-            await self.telegram_bot.send_message(
+            await self.telegram_bot.send_system_notification(
                 f"🧹 <b>Автоматическая очистка</b>\n\n"
                 f"📊 Удалены старые данные (>7 дней)\n"
                 f"📰 Сообщений в базе: {messages_count}\n"
@@ -1801,7 +1801,7 @@ class NewsMonitorWithBot:
                 # Останавливаем прослушивание команд
                 self.telegram_bot.stop_listening()
                 
-                await self.telegram_bot.send_message(
+                await self.telegram_bot.send_system_notification(
                     "🛑 <b>Система мониторинга остановлена</b>\n\n"
                     f"🕐 {datetime.now(pytz.timezone('Asia/Vladivostok')).strftime('%d.%m.%Y %H:%M:%S')} (Владивосток)"
                 )

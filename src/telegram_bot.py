@@ -109,46 +109,86 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"❌ Ошибка установки команд: {e}")
     
-    async def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
-        """Отправить сообщение"""
+    async def send_message(self, text: str, parse_mode: str = "HTML", to_user: int = None) -> bool:
+        """Отправить сообщение (всем разрешенным пользователям или конкретному)"""
         try:
-            url = f"{self.base_url}/sendMessage"
-            
-            data = {
-                "chat_id": self.chat_id,
-                "text": text,
-                "disable_web_page_preview": True
-            }
-            
-            # Добавляем parse_mode только если он указан
-            if parse_mode:
-                data["parse_mode"] = parse_mode
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, data=data)
+            if to_user:
+                # Отправляем конкретному пользователю
+                return await self._send_to_single_user(text, to_user, parse_mode)
+            else:
+                # Отправляем всем разрешенным пользователям
+                return await self._broadcast_message(text, parse_mode)
                 
-                if response.status_code == 200:
-                    logger.info("✅ Сообщение отправлено через бота")
-                    return True
-                else:
-                    logger.error(f"❌ Ошибка отправки: {response.status_code} - {response.text}")
-                    return False
-                    
         except Exception as e:
             logger.error(f"❌ Ошибка отправки сообщения: {e}")
             return False
     
-    async def send_message_with_keyboard(self, text: str, keyboard: list = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True) -> bool:
+    async def _send_to_single_user(self, text: str, chat_id: int, parse_mode: str = "HTML") -> bool:
+        """Отправка сообщения одному пользователю"""
+        try:
+            url = f"{self.base_url}/sendMessage"
+            
+            data = {
+                "chat_id": chat_id,
+                "text": text,
+                "disable_web_page_preview": True
+            }
+            
+            if parse_mode:
+                data["parse_mode"] = parse_mode
+                
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, data=data)
+                
+                if response.status_code == 200:
+                    return True
+                else:
+                    logger.error(f"❌ Ошибка отправки пользователю {chat_id}: {response.status_code}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки сообщения пользователю {chat_id}: {e}")
+            return False
+    
+    async def _broadcast_message(self, text: str, parse_mode: str = "HTML") -> bool:
+        """Отправка сообщения всем разрешенным пользователям"""
+        success_count = 0
+        total_users = len(self.allowed_users)
+        
+        for user_id in self.allowed_users:
+            if await self._send_to_single_user(text, user_id, parse_mode):
+                success_count += 1
+        
+        if success_count > 0:
+            logger.info(f"✅ Сообщение отправлено {success_count}/{total_users} пользователям")
+            return True
+        else:
+            logger.error(f"❌ Не удалось отправить сообщение ни одному пользователю")
+            return False
+    
+    async def send_system_notification(self, text: str, parse_mode: str = "HTML") -> bool:
+        """Отправка системного уведомления всем пользователям (запуск/остановка/ошибки)"""
+        return await self._broadcast_message(text, parse_mode)
+    
+    async def send_command_response(self, text: str, message: dict, parse_mode: str = "HTML") -> bool:
+        """Отправка ответа на команду конкретному пользователю"""
+        user_id = message.get("chat", {}).get("id") if message else self.chat_id
+        return await self._send_to_single_user(text, user_id, parse_mode)
+    
+    async def send_message_with_keyboard(self, text: str, keyboard: list = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True, to_user: int = None) -> bool:
         """Отправить сообщение с клавиатурой"""
         try:
             # Если это inline кнопки - деактивируем старые
             if keyboard and not use_reply_keyboard:
                 await self.deactivate_old_inline_messages()
             
+            # Определяем кому отправлять
+            target_user = to_user if to_user else self.chat_id
+            
             url = f"{self.base_url}/sendMessage"
             
             data = {
-                "chat_id": self.chat_id,
+                "chat_id": target_user,
                 "text": text,
                 "disable_web_page_preview": True
             }
@@ -985,6 +1025,9 @@ class TelegramBot:
     
     async def cmd_start(self, message):
         """Команда /start - главное меню"""
+        # Получаем chat_id отправителя
+        user_id = message.get("chat", {}).get("id") if message else self.chat_id
+        
         keyboard = [
             ["📊 Статус", "🗂️ Управление каналами"],
             ["📈 Статистика", "➕ Добавить канал"],
@@ -1009,7 +1052,7 @@ class TelegramBot:
             "⌨️ <b>Или используйте кнопки снизу:</b>"
         )
         
-        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=True)
+        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=True, to_user=user_id)
     
     async def cmd_manage_channels(self, message):
         """Команда для управления каналами"""
