@@ -133,7 +133,7 @@ class TelegramBot:
                 welcome_text, 
                 main_keyboard, 
                 use_reply_keyboard=True,
-                to_group=False
+                to_group=True
             )
             
             logger.info("✅ Основная клавиатура установлена")
