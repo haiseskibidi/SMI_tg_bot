@@ -505,7 +505,14 @@ class TelegramBot:
                     return
                     
                 callback_data = callback.get("data", "")
-                logger.info(f"🎯 Получен callback: '{callback_data}'")
+                logger.info(f"🎯 Получен callback: '{callback_data}' от пользователя {callback_user_id} в чате {callback_chat_id}")
+                
+                # Проверяем что callback пришел не через reply в группе
+                callback_message = callback.get("message", {})
+                reply_to = callback_message.get("reply_to_message")
+                if reply_to and self.is_message_from_group(callback_chat_id):
+                    logger.warning(f"⚠️ Callback через reply в группе может вызывать проблемы!")
+                
                 await self.handle_callback(callback_data, callback)
             
             # Обрабатываем изменения членства (добавление в группы)
@@ -615,6 +622,7 @@ class TelegramBot:
             elif data == "stats":
                 await self.cmd_stats(callback_message)
             elif data == "add_channel":
+                logger.info("🔧 Обрабатываем callback 'add_channel'")
                 add_text = (
                     "➕ <b>Добавление канала</b>\n\n"
                     "Отправьте ссылку на канал в любом формате:\n"
@@ -624,7 +632,7 @@ class TelegramBot:
                     "Канал будет автоматически добавлен в мониторинг!"
                 )
                 keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
-                await self.edit_message_with_keyboard(add_text, keyboard, use_reply_keyboard=False)
+                await self.edit_message_with_keyboard(add_text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
             elif data.startswith("remove_channel_"):
                 channel_name = data.replace("remove_channel_", "")
                 await self.remove_channel_handler(channel_name)
@@ -637,8 +645,10 @@ class TelegramBot:
             elif data == "clear_stats":
                 await self.clear_stats_handler()
             elif data == "settings":
+                logger.info("🔧 Обрабатываем callback 'settings'")
                 await self.cmd_settings(callback_message)
             elif data == "help":
+                logger.info("🔧 Обрабатываем callback 'help'")  
                 await self.cmd_help(callback_message)
             elif data == "start_monitoring":
                 await self.cmd_start_monitoring(callback_message)
@@ -1121,7 +1131,8 @@ class TelegramBot:
             "📂 /topic_id - узнать ID темы в группе\n"
             "📡 /force_subscribe - принудительная подписка на каналы\n"
             "⚙️ /settings - настройки интерфейса\n\n"
-            "⌨️ <b>Или используйте кнопки ниже:</b>"
+            "⌨️ <b>Или используйте кнопки ниже:</b>\n\n"
+            "⚠️ <b>В группе:</b> пишите команды в чат напрямую, не отвечайте на сообщения бота!"
         )
         
         # Сначала удаляем старую клавиатуру если она есть
@@ -1504,7 +1515,7 @@ class TelegramBot:
         )
         
         keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
-        await self.edit_message_with_keyboard(help_text, keyboard, use_reply_keyboard=False)
+        await self.edit_message_with_keyboard(help_text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
     
     async def cmd_status(self, message):
         """Команда /status - статус системы"""
@@ -2514,7 +2525,7 @@ class TelegramBot:
             [{"text": "🏠 Главное меню", "callback_data": "start"}]
         ]
         
-        await self.edit_message_with_keyboard(settings_text, keyboard, use_reply_keyboard=False)
+        await self.edit_message_with_keyboard(settings_text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
     
     async def add_channel_handler(self, channel_link: str):
         """Обработчик добавления канала"""
