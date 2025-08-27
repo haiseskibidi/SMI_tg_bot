@@ -182,13 +182,24 @@ class TelegramBot:
             if keyboard and not use_reply_keyboard:
                 await self.deactivate_old_inline_messages()
             
-            # Определяем кому отправлять
-            target_user = to_user if to_user else self.chat_id
-            
+            if to_user:
+                # Отправляем конкретному пользователю
+                return await self._send_keyboard_to_user(text, keyboard, parse_mode, use_reply_keyboard, to_user)
+            else:
+                # Отправляем всем разрешенным пользователям
+                return await self._broadcast_keyboard(text, keyboard, parse_mode, use_reply_keyboard)
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки сообщения с клавиатурой: {e}")
+            return False
+    
+    async def _send_keyboard_to_user(self, text: str, keyboard: list, parse_mode: str, use_reply_keyboard: bool, user_id: int) -> bool:
+        """Отправка клавиатуры одному пользователю"""
+        try:
             url = f"{self.base_url}/sendMessage"
             
             data = {
-                "chat_id": target_user,
+                "chat_id": user_id,
                 "text": text,
                 "disable_web_page_preview": True
             }
@@ -224,14 +235,29 @@ class TelegramBot:
                         if keyboard and not use_reply_keyboard:
                             self.active_inline_messages.append(message_id)
                     
-                    logger.info("✅ Сообщение с клавиатурой отправлено")
                     return True
                 else:
                     logger.error(f"❌ Ошибка отправки: {response.status_code} - {response.text}")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ Ошибка отправки сообщения с клавиатурой: {e}")
+            logger.error(f"❌ Ошибка отправки клавиатуры пользователю {user_id}: {e}")
+            return False
+    
+    async def _broadcast_keyboard(self, text: str, keyboard: list, parse_mode: str, use_reply_keyboard: bool) -> bool:
+        """Отправка клавиатуры всем разрешенным пользователям"""
+        success_count = 0
+        total_users = len(self.allowed_users)
+        
+        for user_id in self.allowed_users:
+            if await self._send_keyboard_to_user(text, keyboard, parse_mode, use_reply_keyboard, user_id):
+                success_count += 1
+        
+        if success_count > 0:
+            logger.info(f"✅ Клавиатура отправлена {success_count}/{total_users} пользователям")
+            return True
+        else:
+            logger.error(f"❌ Не удалось отправить клавиатуру ни одному пользователю")
             return False
     
     async def edit_message_with_keyboard(self, text: str, keyboard: list = None, message_id: int = None, parse_mode: str = "HTML", use_reply_keyboard: bool = True) -> bool:
