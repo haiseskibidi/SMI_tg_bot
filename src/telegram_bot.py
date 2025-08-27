@@ -426,6 +426,11 @@ class TelegramBot:
                 if text.startswith("/"):
                     # Команда
                     command = text[1:].split()[0]  # Убираем / и берем первое слово
+                    
+                    # Убираем @botname из команды если есть
+                    if "@" in command:
+                        command = command.split("@")[0]
+                    
                     logger.info(f"🔧 Обрабатываем команду: /{command}")
                     if command in self.command_handlers:
                         await self.command_handlers[command](message)
