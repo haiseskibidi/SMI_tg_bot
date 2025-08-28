@@ -10,6 +10,7 @@ from telethon import TelegramClient
 from loguru import logger
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 async def setup_user_authentication():
     """Настройка авторизации пользователя для чтения каналов"""
@@ -18,18 +19,20 @@ async def setup_user_authentication():
     print("=" * 60)
     print()
     
+    # Загружаем переменные окружения
+    load_dotenv()
+
     # Загружаем конфигурацию (абсолютный путь)
     current_dir = Path(__file__).resolve().parent
     repo_root = current_dir.parent if (current_dir.parent / 'config').exists() else current_dir
     config_path = repo_root / 'config' / 'config.yaml'
-    
+
     print(f"🔗 Путь к конфигурации: {config_path}")
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    api_id = config['telegram']['api_id']
-    api_hash = config['telegram']['api_hash']
-    
+
+    # Получаем API ключи из переменных окружения
+    api_id = int(os.getenv('TELEGRAM_API_ID'))
+    api_hash = os.getenv('TELEGRAM_API_HASH')
+
     print(f"📱 API ID: {api_id}")
     print(f"🔑 API Hash: {api_hash[:10]}...")
     print()
