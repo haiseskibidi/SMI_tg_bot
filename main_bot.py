@@ -76,6 +76,43 @@ class NewsMonitorWithBot:
         self.monitoring_active = True
         logger.info("✅ Мониторинг возобновлен")
     
+    def safe_html_truncate(self, html_text: str, max_length: int) -> str:
+        """Безопасное обрезание HTML текста с сохранением валидности тегов"""
+        if len(html_text) <= max_length:
+            return html_text
+        
+        # Обрезаем до нужной длины
+        truncated = html_text[:max_length]
+        
+        # Находим все открытые HTML теги без закрывающих
+        import re
+        
+        # Удаляем неполные теги в конце (например, "<b" без ">")
+        truncated = re.sub(r'<[^>]*$', '', truncated)
+        
+        # Находим все открытые теги
+        open_tags = re.findall(r'<(\w+)[^>]*>', truncated)
+        
+        # Находим все закрытые теги  
+        close_tags = re.findall(r'</(\w+)>', truncated)
+        
+        # Закрываем незакрытые теги (в обратном порядке)
+        unclosed_tags = []
+        for tag in reversed(open_tags):
+            if tag in close_tags:
+                close_tags.remove(tag)  # Удаляем первое вхождение
+            else:
+                unclosed_tags.append(tag)
+        
+        # Добавляем закрывающие теги
+        for tag in unclosed_tags:
+            truncated += f"</{tag}>"
+        
+        # Добавляем многоточие
+        truncated += "..."
+        
+        return truncated
+
     def convert_markdown_to_html(self, text: str) -> str:
         """Конвертирует markdown форматирование в HTML для Telegram"""
         if not text:
@@ -87,10 +124,12 @@ class NewsMonitorWithBot:
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
         
         # Затем обрабатываем **текст в начале строки (заголовки без закрывающих **)
-        text = re.sub(r'^(\*\*)(.*?)$', r'<b>\2</b>', text, flags=re.MULTILINE)
+        # НО только если нет закрывающих ** в той же строке
+        text = re.sub(r'^(\*\*)([^*\n]*?)$', r'<b>\2</b>', text, flags=re.MULTILINE)
         
-        # Конвертируем *текст* в <i>текст</i> (но только одиночные *)
-        text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<i>\1</i>', text)
+        # Конвертируем *текст* в <i>текст</i> (но только ПАРНЫЕ одиночные *)
+        # Защищаем от обработки одиночных * без пары
+        text = re.sub(r'(?<!\*)\*([^*\n]+?)\*(?!\*)', r'<i>\1</i>', text)
         
         # Экранируем опасные HTML символы (но не наши теги)
         text = text.replace('<', '&lt;').replace('>', '&gt;')
@@ -100,6 +139,47 @@ class NewsMonitorWithBot:
         text = text.replace('&lt;code&gt;', '<code>').replace('&lt;/code&gt;', '</code>')
         
         return text
+    
+    def validate_and_fix_html(self, html_text: str) -> str:
+        """Проверяет и исправляет HTML разметку"""
+        import re
+        
+        # 1. Удаляем одинарные * без пары
+        html_text = re.sub(r'(?<!\*)\*(?![^*]*\*)', '', html_text)
+        
+        # 2. Находим все открытые и закрытые теги
+        open_tags = re.findall(r'<(\w+)[^>]*>', html_text)
+        close_tags = re.findall(r'</(\w+)>', html_text)
+        
+        # 3. Закрываем все незакрытые теги
+        for tag in reversed(open_tags):
+            if tag in close_tags:
+                close_tags.remove(tag)
+            else:
+                html_text += f"</{tag}>"
+        
+        # 4. Удаляем лишние закрывающие теги
+        stack = []
+        result_parts = []
+        
+        tokens = re.findall(r'</?[^>]+>|[^<]+', html_text)
+        
+        for token in tokens:
+            if token.startswith('</'):
+                tag = re.search(r'</(\w+)>', token)
+                if tag and stack and stack[-1] == tag.group(1):
+                    stack.pop()
+                    result_parts.append(token)
+                # Иначе пропускаем лишний закрывающий тег
+            elif token.startswith('<') and not token.endswith('/>'):
+                tag = re.search(r'<(\w+)', token)
+                if tag:
+                    stack.append(tag.group(1))
+                    result_parts.append(token)
+            else:
+                result_parts.append(token)
+        
+        return ''.join(result_parts)
     
     def load_config(self) -> bool:
         """Загрузка конфигурации"""
@@ -1377,7 +1457,9 @@ class NewsMonitorWithBot:
                     # Конвертируем markdown в HTML и ограничиваем длину
                     clean_text = self.convert_markdown_to_html(text.strip())
                     if len(clean_text) > 800:
-                        clean_text = clean_text[:800] + "..."
+                        clean_text = self.safe_html_truncate(clean_text, 800)
+                    # Финальная валидация HTML
+                    clean_text = self.validate_and_fix_html(clean_text)
                     caption += f"\n\n{clean_text}"
                     logger.info(f"📝 Добавлен текст в caption: {clean_text[:50]}...")
                 else:
