@@ -53,6 +53,9 @@ class TelegramBot:
         self.active_inline_messages = []  # Список message_id с активными inline кнопками
         self.current_callback_chat_id = None  # Текущий chat_id из callback для edit_message_with_keyboard
         
+        # Адаптивный polling для экономии трафика
+        self.last_activity_time = 0
+        
         # Регистрируем команды управления
         self.register_command("start", self.cmd_start)
         self.register_command("help", self.cmd_help)
@@ -383,37 +386,75 @@ class TelegramBot:
         self.command_handlers[command] = handler
         logger.info(f"📝 Зарегистрирована команда: /{command}")
     
-    async def get_updates(self) -> list:
-        """Получить обновления от Telegram"""
-        try:
-            url = f"{self.base_url}/getUpdates"
-            data = {
-                "offset": self.update_offset,
-                "timeout": 10,
-                "allowed_updates": ["message", "callback_query"]
-            }
-            
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(url, data=data)
+    async def get_updates(self, max_retries: int = 3) -> list:
+        """Получить обновления от Telegram с retry механизмом и адаптивным timeout"""
+        # Адаптивный timeout для экономии трафика
+        current_time = asyncio.get_event_loop().time()
+        time_since_activity = current_time - self.last_activity_time
+        
+        if time_since_activity > 300:  # 5 минут простоя
+            polling_timeout = 20  # Длинный timeout для экономии трафика
+        elif time_since_activity > 60:  # 1 минута простоя  
+            polling_timeout = 10  # Средний timeout
+        else:
+            polling_timeout = 5   # Короткий timeout для быстрой реакции
+        
+        for attempt in range(max_retries):
+            try:
+                url = f"{self.base_url}/getUpdates"
+                data = {
+                    "offset": self.update_offset,
+                    "timeout": polling_timeout,
+                    "allowed_updates": ["message", "callback_query"]
+                }
                 
-                if response.status_code == 200:
-                    result = response.json()
-                    if result["ok"]:
-                        updates = result["result"]
-                        # Если телеграм вернул пустой массив, ничего не меняем
-                        if not updates:
-                            return []
-                        
-                        # Страхуемся от пропуска апдейтов: сдвигаем offset на max(update_id)+1 сразу
-                        last_update_id = max(update.get("update_id", 0) for update in updates)
-                        if last_update_id >= self.update_offset:
-                            self.update_offset = last_update_id + 1
-                        return updates
+                # HTTP timeout = polling_timeout + 5 секунд буфера
+                http_timeout = polling_timeout + 5
+                async with httpx.AsyncClient(timeout=http_timeout) as client:
+                    response = await client.post(url, data=data)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result["ok"]:
+                            updates = result["result"]
+                            # Если телеграм вернул пустой массив, ничего не меняем
+                            if not updates:
+                                return []
+                            
+                            # Страхуемся от пропуска апдейтов: сдвигаем offset на max(update_id)+1 сразу
+                            last_update_id = max(update.get("update_id", 0) for update in updates)
+                            if last_update_id >= self.update_offset:
+                                self.update_offset = last_update_id + 1
+                            
+                            # Обновляем время последней активности
+                            if updates:
+                                self.last_activity_time = current_time
+                            
+                            # Если получили апдейты после retry, логируем это
+                            if attempt > 0:
+                                logger.info(f"✅ Получены апдейты после {attempt + 1} попытки")
+                            
+                            return updates
+                    else:
+                        logger.warning(f"⚠️ HTTP ошибка {response.status_code} при получении апдейтов")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(1)  # Пауза перед повтором
+                            continue
                 return []
                 
-        except Exception as e:
-            logger.error(f"❌ Ошибка получения обновлений: {e}")
-            return []
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                logger.warning(f"⚠️ Сетевая ошибка при получении апдейтов (попытка {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Экспоненциальный backoff
+                    continue
+                logger.error(f"❌ Все попытки получения апдейтов исчерпаны")
+                return []
+            except Exception as e:
+                logger.error(f"❌ Неожиданная ошибка получения обновлений: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                return []
     
     async def delete_user_message(self, message_id, chat_id: int = None):
         """Удалить сообщение пользователя"""
@@ -2871,12 +2912,29 @@ class TelegramBot:
         except Exception as e:
             logger.warning(f"⚠️ Не удалось установить offset: {e}")
         
+        # Инициализируем время активности
+        self.last_activity_time = asyncio.get_event_loop().time()
+        
+        # Добавляем переменную для heartbeat (только логирование, не сетевой запрос)
+        last_heartbeat = asyncio.get_event_loop().time()
+        heartbeat_interval = 60  # Heartbeat каждую минуту для экономии логов
+        
         try:
             while self.is_listening:
+                current_time = asyncio.get_event_loop().time()
+                
+                # Heartbeat для отладки (не влияет на трафик)
+                if current_time - last_heartbeat > heartbeat_interval:
+                    time_since_activity = current_time - self.last_activity_time
+                    logger.debug(f"💓 Heartbeat - простой {int(time_since_activity)}с")
+                    last_heartbeat = current_time
+                
                 updates = await self.get_updates()
                 if not updates:
-                    # Ничего не пришло — продолжим без задержки (long polling уже ждёт)
+                    # Ничего не пришло — продолжим без задержки (но уже с коротким timeout)
                     continue
+                
+                logger.info(f"📥 Получено {len(updates)} обновлений")
                 
                 # Обрабатываем по одному, безопасно увеличивая offset только после успешной обработки
                 for update in updates:
