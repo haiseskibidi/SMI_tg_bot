@@ -386,7 +386,7 @@ class NewsMonitorWithBot:
             logger.error(f"❌ Ошибка подсчета каналов для региона {region_key}: {e}")
             return 0
     
-    def add_new_region(self, region_key: str, region_name: str, region_emoji: str = '📍', 
+    async def add_new_region(self, region_key: str, region_name: str, region_emoji: str = '📍', 
                       region_description: str = '', region_keywords: list = None, 
                       topic_id: int = None) -> bool:
         """Добавляет новый регион в конфигурацию"""
@@ -415,6 +415,9 @@ class NewsMonitorWithBot:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(self.config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
             
+            # Автокоммит изменений (только config.yaml на этом этапе)
+            await self._auto_commit_config(f"add new region {region_name} ({region_key})", ["config/config.yaml"])
+            
             # Добавляем в channels_config.yaml
             try:
                 with open('config/channels_config.yaml', 'r', encoding='utf-8') as f:
@@ -430,6 +433,9 @@ class NewsMonitorWithBot:
                 
                 with open('config/channels_config.yaml', 'w', encoding='utf-8') as f:
                     yaml.dump(channels_config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                
+                # Автокоммит изменений channels_config.yaml
+                await self._auto_commit_config(f"add region {region_name} to channels config", ["config/channels_config.yaml"])
                     
             except Exception as e:
                 logger.error(f"❌ Ошибка обновления channels_config.yaml: {e}")
@@ -439,6 +445,49 @@ class NewsMonitorWithBot:
             
         except Exception as e:
             logger.error(f"❌ Ошибка создания региона: {e}")
+            return False
+    
+    async def _auto_commit_config(self, action_description: str, files_changed: list = None):
+        """Автоматический коммит изменений конфигурации в Git"""
+        try:
+            if files_changed is None:
+                files_changed = ["config/config.yaml", "config/channels_config.yaml"]
+            
+            # Проверяем что мы в git репозитории
+            import subprocess
+            result = subprocess.run(['git', 'status'], 
+                                 capture_output=True, text=True, cwd=os.getcwd())
+            if result.returncode != 0:
+                logger.warning("⚠️ Не в git репозитории, автокоммит пропущен")
+                return False
+            
+            # Добавляем изменённые файлы
+            for file_path in files_changed:
+                if os.path.exists(file_path):
+                    subprocess.run(['git', 'add', file_path], 
+                                 capture_output=True, cwd=os.getcwd())
+            
+            # Проверяем есть ли изменения для коммита
+            result = subprocess.run(['git', 'diff', '--cached', '--quiet'], 
+                                 capture_output=True, cwd=os.getcwd())
+            if result.returncode == 0:
+                logger.debug("📝 Нет изменений для коммита")
+                return True
+            
+            # Делаем коммит
+            commit_message = f"bot: {action_description}"
+            result = subprocess.run(['git', 'commit', '-m', commit_message], 
+                                 capture_output=True, text=True, cwd=os.getcwd())
+            
+            if result.returncode == 0:
+                logger.success(f"✅ Автокоммит: {commit_message}")
+                return True
+            else:
+                logger.warning(f"⚠️ Ошибка автокоммита: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка автокоммита: {e}")
             return False
     
     def check_alert_keywords(self, text: str) -> tuple:

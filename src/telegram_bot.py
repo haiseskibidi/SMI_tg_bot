@@ -1533,6 +1533,9 @@ class TelegramBot:
             with open(config_path, 'w', encoding='utf-8') as file:
                 yaml.dump(config, file, default_flow_style=False, allow_unicode=True, sort_keys=False)
             
+            # Автокоммит изменений
+            await self.auto_commit_config(f"delete channel @{username} from {region_key}", ["config/channels_config.yaml"])
+            
             # Отправляем уведомление
             success_text = (
                 f"✅ <b>Канал успешно удален!</b>\n\n"
@@ -1866,6 +1869,9 @@ class TelegramBot:
             # Записываем обратно в файл
             with open(config_path, 'w', encoding='utf-8') as file:
                 yaml.dump(config, file, default_flow_style=False, allow_unicode=True, indent=2)
+            
+            # Автокоммит изменений
+            await self.auto_commit_config(f"add topic_id {thread_id} for region {region_key}", ["config/config.yaml"])
             
             # Загружаем информацию о регионе
             regions = await self.load_regions_from_config()
@@ -2817,6 +2823,9 @@ class TelegramBot:
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, allow_unicode=True, indent=2, default_flow_style=False)
             
+            # Автокоммит изменений
+            await self.auto_commit_config(f"add channel @{channel_name} to region {region}", ["config/channels_config.yaml"])
+            
             # ИСПРАВЛЕНИЕ: Очищаем кэш подписок, чтобы при рестарте бот заново подписался на все каналы
             try:
                 if hasattr(self, 'main_instance') and self.main_instance:
@@ -3248,7 +3257,7 @@ class TelegramBot:
             
             # Создаем регион через главный бот
             if self.monitor_bot:
-                success = self.monitor_bot.add_new_region(
+                success = await self.monitor_bot.add_new_region(
                     region_key=data['key'],
                     region_name=data['name'],
                     region_emoji=data['emoji'],
@@ -3286,6 +3295,57 @@ class TelegramBot:
                 
         except Exception as e:
             logger.error(f"❌ Ошибка подтверждения создания региона: {e}")
+
+    async def auto_commit_config(self, action_description: str, files_changed: list = None):
+        """Автоматический коммит изменений конфигурации в Git"""
+        try:
+            if files_changed is None:
+                files_changed = ["config/config.yaml", "config/channels_config.yaml"]
+            
+            # Проверяем что мы в git репозитории
+            result = subprocess.run(['git', 'status'], 
+                                 capture_output=True, text=True, cwd=os.getcwd())
+            if result.returncode != 0:
+                logger.warning("⚠️ Не в git репозитории, автокоммит пропущен")
+                return False
+            
+            # Добавляем изменённые файлы
+            for file_path in files_changed:
+                if os.path.exists(file_path):
+                    subprocess.run(['git', 'add', file_path], 
+                                 capture_output=True, cwd=os.getcwd())
+            
+            # Проверяем есть ли изменения для коммита
+            result = subprocess.run(['git', 'diff', '--cached', '--quiet'], 
+                                 capture_output=True, cwd=os.getcwd())
+            if result.returncode == 0:
+                logger.debug("📝 Нет изменений для коммита")
+                return True
+            
+            # Делаем коммит
+            commit_message = f"bot: {action_description}"
+            result = subprocess.run(['git', 'commit', '-m', commit_message], 
+                                 capture_output=True, text=True, cwd=os.getcwd())
+            
+            if result.returncode == 0:
+                logger.success(f"✅ Автокоммит: {commit_message}")
+                
+                # Опционально: автопуш (раскомментируй если нужен)
+                # push_result = subprocess.run(['git', 'push', 'origin', 'main'], 
+                #                            capture_output=True, text=True, cwd=os.getcwd())
+                # if push_result.returncode == 0:
+                #     logger.success("🚀 Изменения отправлены на сервер")
+                # else:
+                #     logger.warning(f"⚠️ Ошибка автопуша: {push_result.stderr}")
+                
+                return True
+            else:
+                logger.warning(f"⚠️ Ошибка автокоммита: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка автокоммита: {e}")
+            return False
 
 
 # Функция для создания бота из конфигурации
