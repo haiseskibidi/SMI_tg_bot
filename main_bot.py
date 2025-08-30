@@ -840,78 +840,106 @@ class NewsMonitorWithBot:
         rate_limited_channels = []  # Для повторной попытки
         
         logger.info("🔄 Начинаем автоподписку на каналы...")
+        logger.info(f"📊 Всего каналов для обработки: {len(all_channels)}")
         
-        for channel_config in all_channels:
-            try:
-                entity = await self.telegram_monitor.get_channel_entity(channel_config['username'])
-                if entity:
-                    # Проверяем кэш подписок
-                    channel_username = channel_config['username']
-                    if self.is_channel_cached_as_subscribed(channel_username):
-                        logger.info(f"💾 Канал {channel_username} найден в кэше подписок")
-                        monitored_channels.append(entity)
-                        logger.info(f"📡 Добавлен в мониторинг: {channel_username}")
-                        continue
+        # Пакетная обработка каналов с задержками для избежания флудвейта
+        batch_size = 8  # Обрабатываем по 8 каналов за раз
+        processed_count = 0
+        
+        for i in range(0, len(all_channels), batch_size):
+            batch = all_channels[i:i + batch_size]
+            logger.info(f"🔄 Обработка пакета {i//batch_size + 1}/{(len(all_channels) + batch_size - 1)//batch_size} ({len(batch)} каналов)")
+            
+            for channel_config in batch:
+                try:
+                    processed_count += 1
+                    logger.debug(f"📡 Получение entity для канала {channel_config['username']} ({processed_count}/{len(all_channels)})")
                     
-                    # Для новых каналов - проверяем реальную подписку
-                    try:
-                        already = await self.telegram_monitor.is_already_joined(entity)
-                        logger.info(f"🔍 Проверка подписки на {channel_username}: {'ДА' if already else 'НЕТ'}")
-                        if already:
-                            # Добавляем в кэш, если уже подписаны
-                            self.add_channel_to_cache(channel_username)
+                    entity = await self.telegram_monitor.get_channel_entity(channel_config['username'])
+                    if entity:
+                        # Проверяем кэш подписок
+                        channel_username = channel_config['username']
+                        if self.is_channel_cached_as_subscribed(channel_username):
+                            logger.info(f"💾 Канал {channel_username} найден в кэше подписок")
                             monitored_channels.append(entity)
                             logger.info(f"📡 Добавлен в мониторинг: {channel_username}")
+                            # Задержка даже для кешированных каналов
+                            await asyncio.sleep(1)  
                             continue
-                    except Exception as check_error:
-                        logger.warning(f"⚠️ Ошибка проверки подписки на {channel_username}: {check_error}")
-                        already = False
-
-                    # 🚀 АВТОПОДПИСКА НА КАНАЛ (только если не подписан)
-                    try:
-                        await self.telegram_monitor.client(JoinChannelRequest(entity))
-                        logger.info(f"✅ Подписался на {channel_username}")
-                        # Добавляем в кэш после успешной подписки
-                        self.add_channel_to_cache(channel_username)
-                        subscribed_count += 1
-                        await asyncio.sleep(3)  # Увеличенная пауза между подписками
-                    except Exception as sub_error:
-                        error_msg = str(sub_error).lower()
                         
-                        # Обработка rate limiting
-                        if "wait" in error_msg and "seconds" in error_msg:
-                            # Извлекаем количество секунд из сообщения
-                            import re
-                            wait_match = re.search(r'(\d+)\s+seconds', error_msg)
-                            if wait_match:
-                                wait_seconds = int(wait_match.group(1))
-                                logger.warning(f"⏳ Rate limit на {channel_config['username']} - нужно ждать {wait_seconds}с")
-                                logger.info(f"🔄 Пропускаем {channel_config['username']} из-за rate limit, добавляем в мониторинг без подписки")
-                                rate_limited_channels.append((entity, channel_config['username'], wait_seconds))
-                                rate_limited_count += 1
-                            else:
-                                logger.warning(f"⏳ Rate limit на {channel_config['username']}: {sub_error}")
-                                rate_limited_channels.append((entity, channel_config['username'], 90))  # 90 сек по умолчанию
-                                rate_limited_count += 1
-                        elif "already" in error_msg or "участник" in error_msg:
-                            logger.info(f"🔄 Уже подписан на {channel_username}")
-                            # Добавляем в кэш если уже подписан
+                        # Для новых каналов - проверяем реальную подписку
+                        try:
+                            already = await self.telegram_monitor.is_already_joined(entity)
+                            logger.info(f"🔍 Проверка подписки на {channel_username}: {'ДА' if already else 'НЕТ'}")
+                            if already:
+                                # Добавляем в кэш, если уже подписаны
+                                self.add_channel_to_cache(channel_username)
+                                monitored_channels.append(entity)
+                                logger.info(f"📡 Добавлен в мониторинг: {channel_username}")
+                                # Задержка перед следующим каналом
+                                await asyncio.sleep(1.5)
+                                continue
+                        except Exception as check_error:
+                            logger.warning(f"⚠️ Ошибка проверки подписки на {channel_username}: {check_error}")
+                            already = False
+
+                        # 🚀 АВТОПОДПИСКА НА КАНАЛ (только если не подписан)
+                        try:
+                            await self.telegram_monitor.client(JoinChannelRequest(entity))
+                            logger.info(f"✅ Подписался на {channel_username}")
+                            # Добавляем в кэш после успешной подписки
                             self.add_channel_to_cache(channel_username)
-                            subscribed_count += 1  # Считаем как успех
-                        elif "private" in error_msg or "приватный" in error_msg:
-                            logger.warning(f"🔒 Канал {channel_config['username']} приватный - нужно приглашение")
-                            failed_count += 1
-                        elif "invite" in error_msg or "приглашение" in error_msg:
-                            logger.warning(f"📩 Канал {channel_config['username']} требует приглашение")
-                            failed_count += 1
-                        else:
-                            logger.warning(f"⚠️ Не удалось подписаться на {channel_config['username']}: {sub_error}")
-                            failed_count += 1
+                            subscribed_count += 1
+                            await asyncio.sleep(3)  # Увеличенная пауза между подписками
+                        except Exception as sub_error:
+                            error_msg = str(sub_error).lower()
+                            
+                            # Обработка rate limiting
+                            if "wait" in error_msg and "seconds" in error_msg:
+                                # Извлекаем количество секунд из сообщения
+                                import re
+                                wait_match = re.search(r'(\d+)\s+seconds', error_msg)
+                                if wait_match:
+                                    wait_seconds = int(wait_match.group(1))
+                                    logger.warning(f"⏳ Rate limit на {channel_config['username']} - нужно ждать {wait_seconds}с")
+                                    logger.info(f"🔄 Пропускаем {channel_config['username']} из-за rate limit, добавляем в мониторинг без подписки")
+                                    rate_limited_channels.append((entity, channel_config['username'], wait_seconds))
+                                    rate_limited_count += 1
+                                else:
+                                    logger.warning(f"⏳ Rate limit на {channel_config['username']}: {sub_error}")
+                                    rate_limited_channels.append((entity, channel_config['username'], 90))  # 90 сек по умолчанию
+                                    rate_limited_count += 1
+                            elif "already" in error_msg or "участник" in error_msg:
+                                logger.info(f"🔄 Уже подписан на {channel_username}")
+                                # Добавляем в кэш если уже подписан
+                                self.add_channel_to_cache(channel_username)
+                                subscribed_count += 1  # Считаем как успех
+                            elif "private" in error_msg or "приватный" in error_msg:
+                                logger.warning(f"🔒 Канал {channel_config['username']} приватный - нужно приглашение")
+                                failed_count += 1
+                            elif "invite" in error_msg or "приглашение" in error_msg:
+                                logger.warning(f"📩 Канал {channel_config['username']} требует приглашение")
+                                failed_count += 1
+                            else:
+                                logger.warning(f"⚠️ Не удалось подписаться на {channel_config['username']}: {sub_error}")
+                                failed_count += 1
+                        
+                        monitored_channels.append(entity)
+                        logger.info(f"📡 Добавлен в мониторинг: {channel_config['username']}")
+                        
+                    # Задержка между каналами для избежания флудвейта
+                    await asyncio.sleep(2)  
                     
-                    monitored_channels.append(entity)
-                    logger.info(f"📡 Добавлен в мониторинг: {channel_config['username']}")
-            except Exception as e:
-                logger.error(f"❌ Ошибка добавления канала {channel_config['username']}: {e}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка добавления канала {channel_config['username']}: {e}")
+                    # Задержка даже при ошибке
+                    await asyncio.sleep(1)
+            
+            # Пауза между пакетами каналов
+            if i + batch_size < len(all_channels):
+                pause_time = 10  # 10 секунд между пакетами
+                logger.info(f"⏸️ Пауза {pause_time}с между пакетами для избежания флудвейта...")
+                await asyncio.sleep(pause_time)
         
         logger.info(f"📊 Результат автоподписки:")
         logger.info(f"  ✅ Успешно подписался: {subscribed_count} каналов")
