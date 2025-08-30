@@ -70,3 +70,7 @@ tmp/
 screenshots/
 media/
 uploads/
+
+# Рабочие файлы и заметки
+roadmap.md
+server_commands.txt
