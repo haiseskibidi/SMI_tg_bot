@@ -1,6 +1,28 @@
 regions:
   chita:
-    channels: []
+    channels:
+    - title: Канал @chp_chita
+      username: chp_chita
+    - title: Канал @dtp_chita
+      username: dtp_chita
+    - title: Канал @chita
+      username: chita
+    - title: Канал @chita_region75
+      username: chita_region75
+    - title: Канал @zloykrk
+      username: zloykrk
+    - title: Канал @chitaru75
+      username: chitaru75
+    - title: Канал @babr_mash
+      username: babr_mash
+    - title: Канал @chitamediasu
+      username: chitamediasu
+    - title: Канал @gtrk75
+      username: gtrk75
+    - title: Канал @zabchita
+      username: zabchita
+    - title: Канал @redstonenight
+      username: redstonenight
     name: 🏔️ Чита
   general:
     channels:
@@ -59,6 +81,8 @@ regions:
       username: massmediakam
     - title: Канал @live_41
       username: live_41
+    - title: Канал @newskaminform
+      username: newskaminform
     name: 🌋 Камчатка
   sakhalin:
     channels:
@@ -122,5 +146,21 @@ regions:
       username: sakhalinwatch
     name: 🏝️ Сахалин
   yakutsk:
-    channels: []
+    channels:
+    - title: Канал @djiikeytop
+      username: djiikeytop
+    - title: Канал @ysiaru
+      username: ysiaru
+    - title: Канал @pryanayayakutia
+      username: pryanayayakutia
+    - title: Канал @novosty_yakutska
+      username: novosty_yakutska
+    - title: Канал @sakhaday
+      username: sakhaday
+    - title: Канал @yakutia_kp
+      username: yakutia_kp
+    - title: Канал @crimyakutiaru
+      username: crimyakutiaru
+    - title: Канал @yktskandal
+      username: yktskandal
     name: ❄️ Якутск

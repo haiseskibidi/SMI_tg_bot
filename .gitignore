@@ -70,3 +70,5 @@ tmp/
 screenshots/
 media/
 uploads/
+sessions/*.session-journal
+backups/
