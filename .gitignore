@@ -74,3 +74,7 @@ uploads/
 # Рабочие файлы и заметки
 roadmap.md
 server_commands.txt
+
+# Дополнительные файлы сессий и бэкапы
+sessions/*.session-journal
+backups/
