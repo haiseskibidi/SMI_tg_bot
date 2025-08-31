@@ -247,12 +247,19 @@ class DigestGenerator:
 
             # Читаем сообщения
             messages = []
+            total_messages_checked = 0
+            
+            logger.info(f"🔍 Начинаем поиск сообщений. Период: {start_date} - {end_date}")
+            
             async for message in self.telegram_monitor.client.iter_messages(
                 entity, 
-                limit=None,
-                offset_date=start_date,
-                reverse=False
+                limit=200  # Ограничиваем для отладки, убираем offset_date и reverse
             ):
+                total_messages_checked += 1
+                
+                if total_messages_checked <= 5:  # Логируем первые 5 сообщений для отладки
+                    logger.info(f"📄 Сообщение #{total_messages_checked}: дата={message.date}, текст='{message.text[:30] if message.text else 'НЕТ ТЕКСТА'}'")
+                
                 # Конвертируем дату сообщения в нужный timezone для корректного сравнения
                 message_date = message.date
                 if message_date.tzinfo is None:
@@ -264,11 +271,17 @@ class DigestGenerator:
                 
                 # Фильтруем по дате
                 if message_date < start_date or message_date > end_date:
+                    if total_messages_checked <= 5:  # Логируем причины фильтрации для первых сообщений
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано по дате: {message_date} не в периоде {start_date} - {end_date}")
                     continue
                     
                 # Пропускаем сообщения без текста
                 if not message.text or len(message.text.strip()) < 10:
+                    if total_messages_checked <= 5:
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет текста или слишком короткое")
                     continue
+                
+                logger.info(f"✅ Сообщение #{total_messages_checked} подходит! Дата: {message_date}, текст: '{message.text[:50]}'")
                 
                 # Собираем данные о сообщении
                 message_data = {
@@ -300,13 +313,20 @@ class DigestGenerator:
                 messages.append(message_data)
                 
                 # Если дошли до начала периода
-                if message.date < start_date:
+                if message_date < start_date:
                     break
 
-            logger.info(f"📊 Найдено {len(messages)} сообщений в канале @{channel_username}")
+            logger.info(f"📊 Найдено {len(messages)} сообщений в канале @{channel_username} из {total_messages_checked} проверенных")
             
             if not messages:
-                return self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
+                # Добавляем отладочную информацию в пустой дайджест
+                debug_info = f"\n\n🔍 <b>Отладочная информация:</b>\n"
+                debug_info += f"• Проверено сообщений: {total_messages_checked}\n"
+                debug_info += f"• Период поиска: {start_date.strftime('%d.%m.%Y %H:%M')} - {end_date.strftime('%d.%m.%Y %H:%M')}\n"
+                debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}"
+                
+                empty_digest = self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
+                return empty_digest + debug_info
             
             # Сортируем по популярности
             top_messages = sorted(messages, key=lambda x: x['popularity_score'], reverse=True)[:limit]
