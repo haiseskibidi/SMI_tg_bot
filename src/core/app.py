@@ -97,17 +97,38 @@ class NewsMonitorWithBot:
 
     def get_channel_regions(self, channel_username: str) -> list:
         found_regions = []
-        regions_config = self.config_loader.get_regions_config()
         
+        # ПРИОРИТЕТ 1: Проверяем channels_config.yaml (явные настройки)
+        try:
+            import yaml
+            with open('config/channels_config.yaml', 'r', encoding='utf-8') as f:
+                channels_config = yaml.safe_load(f)
+                
+            if channels_config and 'regions' in channels_config:
+                for region_key, region_data in channels_config['regions'].items():
+                    channels = region_data.get('channels', [])
+                    for channel in channels:
+                        if channel.get('username') == channel_username:
+                            found_regions.append(region_key)
+                            logger.debug(f"📍 Канал @{channel_username} найден в channels_config.yaml → {region_key}")
+                            return found_regions  # Возвращаем сразу, не ищем дальше
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка чтения channels_config.yaml: {e}")
+        
+        # ПРИОРИТЕТ 2: Если не найден в явных настройках, ищем по ключевым словам
+        regions_config = self.config_loader.get_regions_config()
         for region_key, region_data in regions_config.items():
             keywords = region_data.get('keywords', [])
             for keyword in keywords:
                 if keyword.lower() in channel_username.lower():
                     found_regions.append(region_key)
+                    logger.debug(f"📍 Канал @{channel_username} найден по ключевому слову '{keyword}' → {region_key}")
                     break
         
+        # FALLBACK: Если нигде не найден
         if not found_regions:
             found_regions.append('general')
+            logger.debug(f"📍 Канал @{channel_username} не найден → general")
         
         return found_regions
 
