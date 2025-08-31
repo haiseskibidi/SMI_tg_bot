@@ -3001,13 +3001,15 @@ class TelegramBot:
         """Обработка callback'ов пагинации дайджеста"""
         try:
             # Формат: digest_page_channel_username_page_number
+            # Учитываем, что имя канала может содержать подчеркивания
             parts = data.split("_")
             if len(parts) < 4:
                 await self.send_message("❌ Некорректный формат callback для пагинации")
                 return
             
-            channel_username = parts[2]
-            page = int(parts[3])
+            # Последняя часть - номер страницы, все между "digest_page_" и последней частью - имя канала
+            page = int(parts[-1])
+            channel_username = "_".join(parts[2:-1])
             
             logger.info(f"📄 Запрос страницы {page} дайджеста для @{channel_username}")
             
