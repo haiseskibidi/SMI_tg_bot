@@ -297,6 +297,493 @@ class NewsMonitorWithBot:
         
         return True
 
+    async def send_message_to_target(self, news: Dict, is_media: bool = False):
+        """Универсальная отправка сообщения в канал или чат с сортировкой по темам"""
+        try:
+            is_alert = news.get('is_alert', False)
+            alert_priority = news.get('alert_priority', False)
+            alert_category = news.get('alert_category', '')
+            
+            if is_alert:
+                logger.warning(f"🚨 Отправляем АЛЕРТ: категория={alert_category}, приоритет={alert_priority}")
+                
+                if alert_priority:
+                    logger.error(f"🚨 ВЫСОКИЙ ПРИОРИТЕТ! {alert_category}")
+            
+            channel_username = news.get('channel_username', '')
+            regions = self.get_channel_regions(channel_username)
+            
+            config = self.config_loader.get_config() or {}
+            output_config = config.get('output', {})
+            target = output_config.get('target_group') or output_config.get('target_channel')
+            
+            logger.info(f"📂 Канал @{channel_username} найден в регионах: {regions}")
+            
+            topics = output_config.get('topics', {})
+            region_threads = []
+            
+            for region in regions:
+                thread_id = topics.get(region) if topics else None
+                region_threads.append((region, thread_id))
+                
+                if thread_id:
+                    logger.info(f"📂 Канал @{channel_username} → регион '{region}' → тема {thread_id}")
+                else:
+                    logger.info(f"📂 Канал @{channel_username} → регион '{region}' → общая лента (темы отключены)")
+            
+            if not target or target in ["@your_news_channel", "your_news_channel"]:
+                if is_media:
+                    await self.send_media_via_bot(news)
+                else:
+                    await self.send_text_with_link(news)
+                return
+            
+            logger.info(f"📤 Отправляем сообщение в канал: {target}")
+            
+            text = news.get('text', '')
+            url = news.get('url', '')
+            channel_username = news.get('channel_username', '')
+            date = news.get('date')
+            
+            text = self.convert_markdown_to_html(text)
+            
+            date_str = ""
+            if date:
+                try:
+                    if hasattr(date, 'strftime'):
+                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                    else:
+                        date_str = f"\n📅 {date}"
+                except:
+                    pass
+            
+            if is_media:
+                message = f"<b>@{channel_username}</b>"
+                if text:
+                    message += f"\n\n{text}"
+                if date_str:
+                    message += f"\n{date_str}"
+                
+                video_count = news.get('video_count', 0)
+                photo_count = news.get('photo_count', 0)
+                
+                if video_count > 0 or photo_count > 0:
+                    media_info = []
+                    if photo_count > 0:
+                        photo_text = f"{photo_count} фото" if photo_count > 1 else "фото"
+                        media_info.append(f"📸 {photo_text}")
+                    if video_count > 0:
+                        video_text = f"{video_count} видео" if video_count > 1 else "видео"
+                        media_info.append(f"🎬 {video_text}")
+                    
+                    if media_info:
+                        message += f"\n\n{' + '.join(media_info)}"
+                
+                if url:
+                    message += f"\n\n🔗 {url}"
+            else:
+                message = f"<b>@{channel_username}</b>"
+                if text:
+                    message += f"\n\n{text}"
+                if date_str:
+                    message += f"\n{date_str}"
+                if url:
+                    message += f"\n\n{url}"
+            
+            all_success = True
+            sent_count = 0
+            
+            for region, thread_id in region_threads:
+                try:
+                    logger.info(f"📤 Отправляем в регион '{region}' (тема: {thread_id or 'общая'})")
+                    
+                    if is_media and news.get('media_files'):
+                        media_files = news.get('media_files', [])
+                        caption = news.get('caption', message)
+                        
+                        if len(media_files) == 1:
+                            success = await self.telegram_bot.send_media_with_caption(
+                                media_files[0][0], caption, target, media_files[0][1], thread_id
+                            )
+                        else:
+                            success = await self.telegram_bot.send_media_group(
+                                media_files, caption, target, thread_id
+                            )
+                    else:
+                        success = await self.telegram_bot.send_message_to_channel(message, target, "HTML", thread_id)
+                    
+                    if success:
+                        logger.info(f"✅ Сообщение отправлено в регион '{region}'")
+                        sent_count += 1
+                    else:
+                        logger.error(f"❌ Ошибка отправки в регион '{region}'")
+                        all_success = False
+                        
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки в регион '{region}': {e}")
+                    all_success = False
+            
+            if sent_count > 0:
+                logger.info(f"✅ Сообщение отправлено в {sent_count}/{len(region_threads)} регионов")
+            else:
+                logger.error("❌ Ошибка отправки во все регионы")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки в канал: {e}")
+
+    async def forward_original_message(self, news: Dict) -> bool:
+        """Пересылка оригинального сообщения"""
+        try:
+            channel_username = news.get('channel_username')
+            message_id = news.get('message_id')
+            
+            logger.info(f"🔄 Попытка пересылки медиа из @{channel_username}, message_id: {message_id}")
+            
+            if not channel_username or not message_id:
+                logger.warning("❌ Нет channel_username или message_id для пересылки")
+                return False
+            
+            config = self.config_loader.get_config() or {}
+            target = config.get('output', {}).get('target_channel')
+            
+            if not target or target in ["@your_news_channel", "your_news_channel"]:
+                target = config.get('bot', {}).get('chat_id')
+                logger.info(f"📱 Используем chat_id бота для пересылки: {target}")
+            else:
+                logger.info(f"📺 Используем target_channel для пересылки: {target}")
+            
+            if not target:
+                logger.error("❌ Нет target для пересылки медиа")
+                return False
+            
+            entity = await self.telegram_monitor.get_channel_entity(channel_username)
+            if not entity:
+                logger.error(f"❌ Не удалось получить entity для {channel_username}")
+                return False
+            
+            target_entity = None
+            try:
+                if isinstance(target, int) or (isinstance(target, str) and target.lstrip('-').isdigit()):
+                    target_entity = await self.telegram_monitor.client.get_entity(int(target))
+                    logger.info(f"✅ Получен target_entity для chat_id: {target}")
+                elif isinstance(target, str) and target.startswith("https://t.me/+"):
+                    logger.info(f"🔗 Обрабатываем приватную ссылку канала: {target}")
+                    invite_hash = target.split("https://t.me/+")[1]
+                    
+                    from telethon.tl.functions.messages import ImportChatInviteRequest
+                    try:
+                        updates = await self.telegram_monitor.client(ImportChatInviteRequest(invite_hash))
+                        if hasattr(updates, 'chats') and updates.chats:
+                            target_entity = updates.chats[0]
+                            logger.info(f"✅ Присоединились к приватному каналу и получили entity")
+                        else:
+                            logger.error("❌ Не удалось получить entity после присоединения")
+                    except Exception as join_error:
+                        logger.warning(f"⚠️ Ошибка присоединения (возможно уже в канале): {join_error}")
+                        try:
+                            target_entity = await self.telegram_monitor.client.get_entity(f"https://t.me/+{invite_hash}")
+                            logger.info(f"✅ Получен entity для приватного канала")
+                        except Exception as entity_error:
+                            logger.error(f"❌ Не удалось получить entity для приватного канала: {entity_error}")
+                else:
+                    target_name = target[1:] if isinstance(target, str) and target.startswith('@') else target
+                    target_entity = await self.telegram_monitor.get_channel_entity(target_name)
+                    logger.info(f"✅ Получен target_entity для канала: {target_name}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка получения target_entity: {e}")
+                target_entity = None
+                
+            if not target_entity:
+                logger.error("❌ Не удалось получить target_entity")
+                return False
+
+            logger.info(f"📤 Отправляем пересылку...")
+            forwarded = await self.telegram_monitor.client.forward_messages(
+                entity=target_entity,
+                messages=message_id,
+                from_peer=entity
+            )
+            
+            if forwarded:
+                logger.info(f"✅ Сообщение переслано из {channel_username}")
+                return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка пересылки: {e}")
+        
+        return False
+
+    async def download_and_send_media(self, news: Dict) -> bool:
+        """Скачать медиа файлы через Telethon и отправить через Bot API"""
+        try:
+            import os
+            import tempfile
+            from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
+            
+            channel_username = news.get('channel_username')
+            message_id = news.get('message_id')
+            text = news.get('text', '')
+            
+            logger.info(f"📥 Скачиваем медиа из @{channel_username}, message_id: {message_id}")
+            logger.info(f"📝 Текст сообщения (длина {len(text)}): {text[:100]}{'...' if len(text) > 100 else ''}")
+            
+            entity = await self.telegram_monitor.get_channel_entity(channel_username)
+            if not entity:
+                logger.error(f"❌ Не удалось получить entity для {channel_username}")
+                return False
+            
+            message = await self.telegram_monitor.client.get_messages(entity, ids=message_id)
+            if not message or not message.media:
+                logger.warning("❌ Сообщение не найдено или не содержит медиа")
+                return False
+            
+            messages_to_process = [message]
+            if hasattr(message, 'grouped_id') and message.grouped_id:
+                logger.info(f"🖼️ Обнаружена медиа группа (grouped_id: {message.grouped_id})")
+                all_messages = await self.telegram_monitor.client.get_messages(entity, limit=50)
+                group_messages = [msg for msg in all_messages if hasattr(msg, 'grouped_id') and msg.grouped_id == message.grouped_id]
+                messages_to_process = sorted(group_messages, key=lambda x: x.id)
+                logger.info(f"📦 Найдено {len(messages_to_process)} медиа в группе")
+                
+                for msg in messages_to_process:
+                    if msg.text and msg.text.strip():
+                        text = msg.text.strip()
+                        news['text'] = text
+                        logger.info(f"📝 Найден текст в медиа-группе (длина {len(text)}): {text[:100]}{'...' if len(text) > 100 else ''}")
+                        break
+            
+            media_files = []
+            temp_files = []
+            video_count = 0
+            photo_count = 0
+            
+            for msg in messages_to_process:
+                if not msg.media:
+                    continue
+                    
+                if isinstance(msg.media, MessageMediaPhoto):
+                    photo_count += 1
+                elif isinstance(msg.media, MessageMediaDocument):
+                    document = msg.media.document
+                    if document.mime_type:
+                        if document.mime_type.startswith('image/'):
+                            photo_count += 1
+                        elif document.mime_type.startswith('video/'):
+                            video_count += 1
+            
+            logger.info(f"📊 В группе: {photo_count} фото, {video_count} видео")
+            
+            for i, msg in enumerate(messages_to_process):
+                if not msg.media:
+                    continue
+                    
+                media_type = "document"
+                file_extension = ".bin"
+                should_download = False
+                
+                if isinstance(msg.media, MessageMediaPhoto):
+                    media_type = "photo"
+                    file_extension = ".jpg"
+                    should_download = True
+                elif isinstance(msg.media, MessageMediaDocument):
+                    document = msg.media.document
+                    if document.mime_type:
+                        if document.mime_type.startswith('image/'):
+                            media_type = "photo"
+                            file_extension = ".jpg"
+                            should_download = True
+                        elif document.mime_type.startswith('video/'):
+                            logger.info(f"🎬 Пропускаем видео {i+1} (слишком долго скачивается)")
+                            continue
+                        elif document.mime_type.startswith('audio/'):
+                            media_type = "document"
+                            file_extension = ".mp3"
+                            should_download = True
+                    
+                    for attr in document.attributes:
+                        if hasattr(attr, 'file_name') and attr.file_name:
+                            file_extension = os.path.splitext(attr.file_name)[1] or file_extension
+                            break
+                
+                if should_download:
+                    with tempfile.NamedTemporaryFile(suffix=f"_{i}{file_extension}", delete=False) as temp_file:
+                        temp_path = temp_file.name
+                        temp_files.append(temp_path)
+                    
+                    logger.info(f"💾 Скачиваем {media_type} {len(media_files)+1}")
+                    await self.telegram_monitor.client.download_media(msg, temp_path)
+                    media_files.append((temp_path, media_type))
+            
+            if not media_files:
+                if video_count > 0:
+                    logger.info(f"🎬 Пост содержит только видео ({video_count} шт.), отправляем текстовое уведомление")
+                    news['video_count'] = video_count
+                    news['photo_count'] = photo_count
+                    await self.send_message_to_target(news, is_media=True)
+                    return True
+                else:
+                    logger.warning("❌ Не удалось скачать медиа файлы")
+                    return False
+            
+            try:
+                vladivostok_tz = pytz.timezone('Asia/Vladivostok')
+                date = news.get('date')
+                if date:
+                    try:
+                        if isinstance(date, str):
+                            date = datetime.fromisoformat(date.replace('Z', '+00:00'))
+                        if date.tzinfo is None:
+                            date = date.replace(tzinfo=pytz.UTC)
+                        date_vlk = date.astimezone(vladivostok_tz)
+                        date_str = f"\n📅 {date_vlk.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                    except:
+                        date_str = ""
+                else:
+                    date_str = ""
+                
+                caption = f"<b>@{channel_username}</b>"
+                if text:
+                    clean_text = self.convert_markdown_to_html(text.strip())
+                    if len(clean_text) > 800:
+                        clean_text = self.safe_html_truncate(clean_text, 800)
+                    clean_text = self.validate_and_fix_html(clean_text)
+                    caption += f"\n\n{clean_text}"
+                    logger.info(f"📝 Добавлен текст в caption: {clean_text[:50]}...")
+                else:
+                    logger.warning("⚠️ Текст сообщения пустой!")
+                
+                if date_str:
+                    caption += f"\n{date_str}"
+                
+                if video_count > 0:
+                    video_text = f"{video_count} видео" if video_count > 1 else "видео"
+                    caption += f"\n\n🎬 В посте также есть {video_text}"
+                
+                url = news.get('url')
+                if url:
+                    caption += f"\n\n🔗 {url}"
+                
+                logger.info(f"📋 Итоговый caption (длина {len(caption)}): {caption[:150]}{'...' if len(caption) > 150 else ''}")
+                
+                news['video_count'] = video_count
+                news['photo_count'] = photo_count
+                news['media_files'] = media_files
+                news['caption'] = caption
+                news['text'] = caption
+                
+                await self.send_message_to_target(news, is_media=True)
+                success = True
+                
+                if success:
+                    logger.info(f"✅ Медиа успешно отправлено: {len(media_files)} файл(ов)")
+                    return True
+                else:
+                    logger.error("❌ Не удалось отправить медиа")
+                    return False
+                
+            finally:
+                for temp_path in temp_files:
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass
+                logger.info(f"🗑️ Удалено {len(temp_files)} временных файлов")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка скачивания и отправки медиа: {e}")
+            return False
+
+    async def send_media_via_bot(self, news: Dict):
+        """Отправка сообщения с файлами через бота"""
+        try:
+            text = news.get('text', '')
+            url = news.get('url', '')
+            channel_username = news.get('channel_username', '')
+            date = news.get('date')
+            
+            date_str = ""
+            if date:
+                try:
+                    if hasattr(date, 'strftime'):
+                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                    else:
+                        date_str = f"\n📅 {date}"
+                except:
+                    pass
+            
+            media_notification = f"<b>@{channel_username}</b>"
+            
+            if text:
+                clean_text = self.convert_markdown_to_html(text)
+                media_notification += f"\n\n{clean_text}"
+            
+            if date_str:
+                media_notification += f"\n{date_str}"
+            
+            video_count = news.get('video_count', 0)
+            photo_count = news.get('photo_count', 0)
+            
+            if video_count > 0 or photo_count > 0:
+                media_info = []
+                if photo_count > 0:
+                    photo_text = f"{photo_count} фото" if photo_count > 1 else "фото"
+                    media_info.append(f"📸 {photo_text}")
+                if video_count > 0:
+                    video_text = f"{video_count} видео" if video_count > 1 else "видео"
+                    media_info.append(f"🎬 {video_text}")
+                
+                if media_info:
+                    media_notification += f"\n\n{' + '.join(media_info)}"
+            
+            if url:
+                media_notification += f"\n\n🔗 {url}"
+            
+            success = await self.telegram_bot.send_message(media_notification)
+            if success:
+                logger.info(f"✅ Сообщение отправлено: @{channel_username}")
+            else:
+                logger.error("❌ Ошибка отправки сообщения")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки сообщения: {e}")
+
+    async def send_text_with_link(self, news: Dict):
+        """Отправка текстового сообщения с ссылкой через бота"""
+        try:
+            text = news.get('text', '')
+            url = news.get('url', '')
+            channel_username = news.get('channel_username', '')
+            date = news.get('date')
+            
+            clean_text = self.convert_markdown_to_html(text)
+            
+            date_str = ""
+            if date:
+                try:
+                    if hasattr(date, 'strftime'):
+                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                    else:
+                        date_str = f"\n📅 {date}"
+                except:
+                    pass
+            
+            message = f"<b>@{channel_username}</b>"
+            if clean_text:
+                message += f"\n\n{clean_text}"
+            if date_str:
+                message += f"\n{date_str}"
+            if url:
+                message += f"\n\n{url}"
+            
+            success = await self.telegram_bot.send_message(message)
+            if success:
+                logger.info(f"✅ Сообщение отправлено: @{channel_username}")
+            else:
+                logger.error("❌ Ошибка отправки сообщения")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки сообщения: {e}")
+
 
 async def main():
     print("🤖 Запуск Telegram News Monitor Bot...")
