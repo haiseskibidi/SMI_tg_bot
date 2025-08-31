@@ -50,6 +50,8 @@ class TelegramBot:
         self.pending_channels_list = []  # Список каналов для массового добавления
         self.waiting_for_region_name = False  # Флаг ожидания названия нового региона
         self.waiting_for_emoji = False  # Флаг ожидания пользовательского эмодзи
+        self.waiting_for_digest_channel = False  # Флаг ожидания ссылки для дайджеста
+        self.digest_days = 7  # Период для дайджеста по умолчанию
         self.processed_forwards = set()  # Кэш для предотвращения дублирования forward сообщений
         self.pending_region_data = None  # Данные создаваемого региона
         self.pending_topic_data = None  # Данные темы для автоматического добавления в конфиг
@@ -568,22 +570,29 @@ class TelegramBot:
 
                     elif any(keyword in text for keyword in ["t.me/", "@", "https://"]):
                         logger.info(f"🔗 Обрабатываем ссылки на каналы: {text}")
-                        # Ищем все каналы в сообщении
-                        found_channels = self.parse_multiple_channels(text)
                         
-                        if not found_channels:
-                            await self.send_message("❌ Не найдено валидных каналов в сообщении")
-                        elif len(found_channels) == 1:
-                            # Один канал - как раньше
-                            self.pending_channel_url = found_channels[0]
-                            await self.show_region_selection()
+                        # Проверяем, ожидаем ли мы ссылку для дайджеста
+                        if self.waiting_for_digest_channel:
+                            logger.info(f"📰 Обрабатываем ссылку для дайджеста")
+                            self.waiting_for_digest_channel = False
+                            await self.basic_commands.handle_channel_link_for_digest(message)
                         else:
-                            # Несколько каналов - показываем список
-                            self.pending_channels_list = found_channels
-                            await self.show_multiple_channels_selection()
+                            # Обрабатываем как добавление канала
+                            found_channels = self.parse_multiple_channels(text)
+                            
+                            if not found_channels:
+                                await self.send_message("❌ Не найдено валидных каналов в сообщении")
+                            elif len(found_channels) == 1:
+                                # Один канал - как раньше
+                                self.pending_channel_url = found_channels[0]
+                                await self.show_region_selection()
+                            else:
+                                # Несколько каналов - показываем список
+                                self.pending_channels_list = found_channels
+                                await self.show_multiple_channels_selection()
                     else:
                         logger.info(f"❓ Неизвестное сообщение: '{text}'")
-                        await self.send_message("ℹ️ Используйте кнопки снизу или отправьте ссылку на канал.\nДля справки: /help")
+                        await self.send_message("ℹ️ Используйте кнопки снизу или отправьте ссылку на канал.\nДля дайджеста: /digest\nДля справки: /help")
                     
                     # Удаляем сообщение пользователя для всех кнопок и ссылок
                     if message_id and not text.startswith("/") and self.delete_commands:
@@ -796,6 +805,7 @@ class TelegramBot:
                 self.pending_channel_url = None
                 self.waiting_for_region_name = False
                 self.waiting_for_emoji = False
+                self.waiting_for_digest_channel = False
                 self.pending_region_data = None
                 self.pending_topic_data = None
                 await self.cmd_start(callback_message)

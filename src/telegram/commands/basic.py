@@ -338,40 +338,27 @@ class BasicCommands:
                 except ValueError:
                     pass
 
-            # Получаем список каналов с новостями  
-            available_channels = await self.digest_generator.get_available_channels(days)
-            
-            if not available_channels:
-                await self.bot.send_message("❌ Каналы с новостями не найдены")
-                return
+            # Простой интерфейс - просим ссылку на канал
+            keyboard = [
+                [{"text": "🌍 Все каналы", "callback_data": f"digest_all_channels_{days}"}],
+                [{"text": "🏠 Главное меню", "callback_data": "start"}]
+            ]
 
-            # Показываем меню выбора канала (топ-10 самых активных)
-            keyboard = []
-            
-            # Добавляем "Все каналы" как первую опцию
-            keyboard.append([{"text": "🌍 Все каналы", "callback_data": f"digest_all_channels_{days}"}])
-            
-            # Добавляем топ каналов (максимум 8)
-            for i, channel in enumerate(available_channels[:8]):
-                name = channel['name'][:25] + "..." if len(channel['name']) > 25 else channel['name']
-                emoji = "📺"
-                
-                # Показываем количество сообщений для понимания
-                msg_count = channel['messages_count']
-                text = f"{emoji} {name} ({msg_count})"
-                
-                keyboard.append([{"text": text, "callback_data": f"digest_channel_{channel['username']}_{days}"}])
-            
-            keyboard.append([{"text": "🏠 Главное меню", "callback_data": "start"}])
-
-            channel_text = "📰 <b>Выберите канал для дайджеста:</b>\n\n"
-            channel_text += f"📅 Период: {days} дней\n"
-            channel_text += f"📊 Найдено каналов: {len(available_channels)}\n\n"
+            channel_text = "📰 <b>Дайджест топ новостей</b>\n\n"
+            channel_text += f"📅 Период: {days} дней\n\n"
+            channel_text += "📝 <b>Отправьте ссылку на канал:</b>\n"
+            channel_text += "• <code>https://t.me/channel_name</code>\n"
+            channel_text += "• <code>@channel_name</code>\n"
+            channel_text += "• <code>channel_name</code>\n\n"
+            channel_text += "Или выберите \"🌍 Все каналы\" для общего дайджеста\n\n"
             channel_text += "💡 <b>Примеры команд:</b>\n"
-            channel_text += "• <code>/digest</code> - неделя, все каналы\n"
-            channel_text += "• <code>/digest 14</code> - 14 дней\n"
-            channel_text += "• <code>/digest 2025-01-01 2025-01-07</code> - свой период"
+            channel_text += "• <code>/digest</code> - неделя\n"
+            channel_text += "• <code>/digest 14</code> - 14 дней"
 
+            # Устанавливаем состояние ожидания ссылки на канал
+            self.bot.waiting_for_digest_channel = True
+            self.bot.digest_days = days
+            
             await self.bot.send_message_with_keyboard(channel_text, keyboard)
 
         except Exception as e:
@@ -399,6 +386,68 @@ class BasicCommands:
         except Exception as e:
             logger.error(f"❌ Ошибка генерации дайджеста для канала {channel}: {e}")
             return f"❌ Не удалось сгенерировать дайджест: {e}"
+
+    async def handle_channel_link_for_digest(self, message: Dict[str, Any]) -> bool:
+        """Обработка ссылки на канал для дайджеста"""
+        try:
+            text = message.get("text", "").strip()
+            if not text:
+                return False
+            
+            # Проверяем, является ли текст ссылкой на канал
+            channel_username = self._parse_channel_link(text)
+            if not channel_username:
+                return False
+            
+            logger.info(f"📰 Получена ссылка на канал для дайджеста: {channel_username}")
+            
+            # Генерируем дайджест для канала
+            await self.bot.send_message(f"📰 Генерируем дайджест для @{channel_username}, подождите...")
+            
+            # Используем сохраненный период из команды digest
+            days = getattr(self.bot, 'digest_days', 7)
+            digest_text = await self.generate_digest_for_channel(channel_username, days)
+            
+            # Отправляем результат
+            keyboard = [
+                [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
+                [{"text": "🏠 Главное меню", "callback_data": "start"}]
+            ]
+            
+            await self.bot.send_message_with_keyboard(digest_text, keyboard)
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки ссылки на канал: {e}")
+            await self.bot.send_message(f"❌ Ошибка обработки ссылки: {e}")
+            return False
+
+    def _parse_channel_link(self, text: str) -> Optional[str]:
+        """Парсинг ссылки на канал"""
+        try:
+            text = text.strip()
+            
+            # https://t.me/channel_name
+            if text.startswith("https://t.me/"):
+                username = text.replace("https://t.me/", "")
+                # Убираем дополнительные параметры (?start=, /123 и т.д.)
+                username = username.split("?")[0].split("/")[0]
+                return username if username and not username.startswith("+") else None
+            
+            # @channel_name
+            elif text.startswith("@"):
+                username = text[1:]
+                return username if username else None
+            
+            # channel_name (простое имя)
+            elif text.replace("_", "").replace("-", "").isalnum() and len(text) >= 3:
+                return text
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка парсинга ссылки: {e}")
+            return None
 
     async def topic_id(self, message: Optional[Dict[str, Any]]) -> None:
         chat = message.get("chat", {}) if message else {}
