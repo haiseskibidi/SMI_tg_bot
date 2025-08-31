@@ -221,12 +221,15 @@ class DigestGenerator:
                 logger.error("❌ Telegram monitor или client недоступен")
                 return "❌ Не удалось подключиться к Telegram для чтения канала"
 
-            # Определяем период
+            # Определяем период (с учетом timezone)
             if custom_start_date and custom_end_date:
                 start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
                 end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
+                # Добавляем timezone для корректного сравнения
+                start_date = self.vladivostok_tz.localize(start_date)
+                end_date = self.vladivostok_tz.localize(end_date.replace(hour=23, minute=59, second=59))
             else:
-                end_date = datetime.now(self.vladivostok_tz).replace(tzinfo=None)
+                end_date = datetime.now(self.vladivostok_tz)
                 start_date = end_date - timedelta(days=days)
             
             logger.info(f"📰 Читаем сообщения из @{channel_username} за период {start_date.date()} - {end_date.date()}")
@@ -250,8 +253,17 @@ class DigestGenerator:
                 offset_date=start_date,
                 reverse=False
             ):
+                # Конвертируем дату сообщения в нужный timezone для корректного сравнения
+                message_date = message.date
+                if message_date.tzinfo is None:
+                    # Если дата без timezone, считаем что это UTC
+                    message_date = pytz.UTC.localize(message_date)
+                
+                # Конвертируем в наш timezone для сравнения
+                message_date = message_date.astimezone(self.vladivostok_tz)
+                
                 # Фильтруем по дате
-                if message.date < start_date or message.date > end_date:
+                if message_date < start_date or message_date > end_date:
                     continue
                     
                 # Пропускаем сообщения без текста
@@ -262,7 +274,7 @@ class DigestGenerator:
                 message_data = {
                     'id': message.id,
                     'text': message.text,
-                    'date': message.date,
+                    'date': message_date,  # Используем уже сконвертированную дату
                     'views': getattr(message, 'views', 0) or 0,
                     'forwards': getattr(message, 'forwards', 0) or 0,
                     'replies': getattr(message.replies, 'replies', 0) if message.replies else 0,
