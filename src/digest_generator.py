@@ -253,7 +253,7 @@ class DigestGenerator:
             
             async for message in self.telegram_monitor.client.iter_messages(
                 entity, 
-                limit=200  # Ограничиваем для отладки, убираем offset_date и reverse
+                limit=None  # Проверяем ВСЕ сообщения
             ):
                 total_messages_checked += 1
                 
@@ -281,33 +281,59 @@ class DigestGenerator:
                         logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет текста или слишком короткое")
                     continue
                 
-                logger.info(f"✅ Сообщение #{total_messages_checked} подходит! Дата: {message_date}, текст: '{message.text[:50]}'")
+                # Исключаем "ночной чат" и подобные посты
+                text_lower = message.text.lower()
+                if self._is_chat_message(text_lower):
+                    if total_messages_checked <= 10:
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: ночной чат/общение")
+                    continue
                 
-                # Собираем данные о сообщении
+                # Подсчитываем активность (реакции + комментарии)
+                views = getattr(message, 'views', 0) or 0
+                forwards = getattr(message, 'forwards', 0) or 0
+                replies = getattr(message.replies, 'replies', 0) if message.replies else 0
+                reactions_count = 0
+                
+                if hasattr(message, 'reactions') and message.reactions:
+                    for reaction in message.reactions.results:
+                        reactions_count += reaction.count
+                
+                # Фильтруем только по реакциям и комментариям (НЕ по просмотрам)
+                engagement = replies + reactions_count
+                if engagement == 0:
+                    if total_messages_checked <= 10:
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет реакций/комментариев (replies={replies}, reactions={reactions_count})")
+                    continue
+                
+                # Региональная фильтрация
+                regional_keywords = self._get_regional_keywords(channel_username)
+                if regional_keywords:
+                    is_regional_news = any(keyword in text_lower for keyword in regional_keywords)
+                    if not is_regional_news:
+                        if total_messages_checked <= 10:
+                            logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: не относится к региону")
+                        continue
+                
+                logger.info(f"✅ Сообщение #{total_messages_checked} подходит! Дата: {message_date}, реакции: {reactions_count}, комментарии: {replies}, текст: '{message.text[:50]}'")
+                
+                # Собираем данные о сообщении (используем уже вычисленные значения)
                 message_data = {
                     'id': message.id,
                     'text': message.text,
                     'date': message_date,  # Используем уже сконвертированную дату
-                    'views': getattr(message, 'views', 0) or 0,
-                    'forwards': getattr(message, 'forwards', 0) or 0,
-                    'replies': getattr(message.replies, 'replies', 0) if message.replies else 0,
-                    'reactions_count': 0,
+                    'views': views,
+                    'forwards': forwards,
+                    'replies': replies,
+                    'reactions_count': reactions_count,
                     'url': f"https://t.me/{channel_username}/{message.id}"
                 }
                 
-                # Подсчитываем реакции
-                if hasattr(message, 'reactions') and message.reactions:
-                    reactions_count = 0
-                    for reaction in message.reactions.results:
-                        reactions_count += reaction.count
-                    message_data['reactions_count'] = reactions_count
-                
-                # Вычисляем популярность
+                # Вычисляем популярность (акцент на реакции и комментарии)
                 message_data['popularity_score'] = (
-                    message_data['views'] + 
-                    message_data['forwards'] * 2 + 
-                    message_data['replies'] * 3 + 
-                    message_data['reactions_count'] * 5
+                    message_data['replies'] * 10 +      # Комментарии - самое важное
+                    message_data['reactions_count'] * 8 + # Реакции - очень важно
+                    message_data['forwards'] * 3 +       # Репосты - важно
+                    message_data['views'] * 0.1          # Просмотры - минимальный вес
                 )
                 
                 messages.append(message_data)
@@ -320,10 +346,16 @@ class DigestGenerator:
             
             if not messages:
                 # Добавляем отладочную информацию в пустой дайджест
+                regional_keywords = self._get_regional_keywords(channel_username)
                 debug_info = f"\n\n🔍 <b>Отладочная информация:</b>\n"
                 debug_info += f"• Проверено сообщений: {total_messages_checked}\n"
                 debug_info += f"• Период поиска: {start_date.strftime('%d.%m.%Y %H:%M')} - {end_date.strftime('%d.%m.%Y %H:%M')}\n"
-                debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}"
+                debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}\n"
+                debug_info += f"• Фильтры: реакции/комментарии > 0, исключен 'ночной чат'\n"
+                if regional_keywords:
+                    debug_info += f"• Региональные слова: {', '.join(regional_keywords[:5])}..."
+                else:
+                    debug_info += f"• Региональный фильтр отключен для канала @{channel_username}"
                 
                 empty_digest = self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
                 return empty_digest + debug_info
@@ -356,15 +388,25 @@ class DigestGenerator:
         
         digest_lines = []
         for i, msg in enumerate(messages, 1):
-            # Первые 50 символов текста
-            text_preview = msg['text'][:50].replace('\n', ' ').strip()
-            if len(msg['text']) > 50:
+            # Первые 60 символов текста
+            text_preview = msg['text'][:60].replace('\n', ' ').strip()
+            if len(msg['text']) > 60:
                 text_preview += "..."
             
-            # Статистика
-            total_engagement = msg['views'] + msg['forwards'] + msg['replies'] + msg['reactions_count']
+            # Детальная статистика активности
+            reactions = msg['reactions_count']
+            replies = msg['replies']
             
-            line = f"⚡️ {text_preview} ({msg['url']}) [{total_engagement} реакций]"
+            # Формируем строку активности
+            activity_parts = []
+            if reactions > 0:
+                activity_parts.append(f"👍{reactions}")
+            if replies > 0:
+                activity_parts.append(f"💬{replies}")
+            
+            activity_str = " ".join(activity_parts) if activity_parts else "0 активности"
+            
+            line = f"⚡️ {text_preview} ({msg['url']}) [{activity_str}]"
             digest_lines.append(line)
         
         footer = "\n\nЭти новости собрали больше всего реакций и комментариев от читателей. А вам что больше всего запомнилось?"
@@ -383,7 +425,111 @@ class DigestGenerator:
             f"📅 Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}\n\n"
             f"😔 В канале @{channel_username} не найдено новостей за указанный период.\n\n"
             f"💡 Попробуйте:\n"
-            f"• Увеличить период поиска\n"
-            f"• Проверить правильность названия канала\n"
-            f"• Убедиться, что канал публичный"
-        )
+                         f"• Увеличить период поиска\n"
+             f"• Проверить правильность названия канала\n"
+             f"• Убедиться, что канал публичный"
+         )
+
+    def _get_regional_keywords(self, channel_username: str) -> List[str]:
+        """Получить ключевые слова для региональной фильтрации по каналу"""
+        channel_lower = channel_username.lower()
+        
+        # Камчатка
+        if "kamchat" in channel_lower or "камчат" in channel_lower:
+            return [
+                "камчатк", "петропавловск", "елизово", "мильково", "усть-большерецк", 
+                "усть-камчатск", "вилючинск", "ключи", "эссо", "палана",
+                "командорск", "никольское", "тигиль", "оссора", "пенжино"
+            ]
+        
+        # Владивосток
+        elif "vladivostok" in channel_lower or "владивосток" in channel_lower:
+            return [
+                "владивосток", "приморск", "находка", "уссурийск", "артем", 
+                "партизанск", "спасск", "дальнегорск", "лесозаводск", "арсеньев"
+            ]
+        
+        # Хабаровск
+        elif "khabarovsk" in channel_lower or "хабаровск" in channel_lower:
+            return [
+                "хабаровск", "комсомольск", "амурск", "николаевск", "советская гавань",
+                "бикин", "вяземский", "охотск", "аян"
+            ]
+        
+        # Благовещенск
+        elif "blagoveshchensk" in channel_lower or "благовещенск" in channel_lower:
+            return [
+                "благовещенск", "белогорск", "свободный", "зея", "тында", 
+                "шимановск", "завитинск", "райчихинск"
+            ]
+        
+        # Сахалин
+        elif "sakhalin" in channel_lower or "сахалин" in channel_lower:
+            return [
+                "сахалин", "южно-сахалинск", "холмск", "корсаков", "невельск",
+                "александровск", "поронайск", "макаров", "курилы", "оха"
+            ]
+        
+        # Якутск
+        elif "yakutsk" in channel_lower or "якутск" in channel_lower:
+            return [
+                "якутск", "якути", "саха", "мирный", "нерюнгри", "алдан", 
+                "ленск", "олекминск", "верхоянск", "магадан"
+            ]
+        
+        # Иркутск
+        elif "irkutsk" in channel_lower or "иркутск" in channel_lower:
+            return [
+                "иркутск", "ангарск", "братск", "усть-илимск", "черемхово",
+                "саянск", "шелехов", "тулун", "байкал"
+            ]
+        
+        # Улан-Удэ
+        elif "ulan" in channel_lower or "улан" in channel_lower or "buryat" in channel_lower:
+            return [
+                "улан-удэ", "бурят", "северобайкальск", "гусиноозерск", 
+                "закаменск", "кяхта", "баргузин", "турунтаево"
+            ]
+        
+        # Чита
+        elif "chita" in channel_lower or "чита" in channel_lower:
+            return [
+                "чита", "краснокаменск", "борзя", "петровск", "нерчинск",
+                "шилка", "сретенск", "балей"
+            ]
+        
+        # Если канал не определен, не фильтруем по региону
+        return []
+
+    def _is_chat_message(self, text_lower: str) -> bool:
+        """Проверка, является ли сообщение обычным общением (не новостью)"""
+        chat_keywords = [
+            # Ночной чат
+            "ночной чат", "night chat", "доброй ночи", "спокойной ночи", 
+            "всем сладких снов", "приятных снов",
+            
+            # Утренние приветствия
+            "доброе утро", "с добрым утром", "всем доброго утра",
+            
+            # Общие приветствия
+            "всем привет", "привет всем", "добрый день", "добрый вечер",
+            
+            # Вопросы/общение
+            "как дела", "что нового", "как погода", "кто онлайн",
+            
+            # Служебные сообщения
+            "опрос:", "голосование:", "вопрос дня", "обсуждение:",
+            
+            # Эмодзи-сообщения (только эмодзи)
+        ]
+        
+        # Проверяем наличие ключевых слов чата
+        if any(keyword in text_lower for keyword in chat_keywords):
+            return True
+        
+        # Проверяем, состоит ли сообщение только из эмодзи и коротких слов
+        words = text_lower.split()
+        if len(words) <= 3 and all(len(word) <= 4 for word in words):
+            return True
+        
+        return False
