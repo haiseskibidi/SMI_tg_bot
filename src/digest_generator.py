@@ -288,6 +288,12 @@ class DigestGenerator:
                     if total_messages_checked <= 10:
                         logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: ночной чат/общение")
                     continue
+
+                # Исключаем политические посты
+                if "#политика" in text_lower or "#политик" in text_lower:
+                    if total_messages_checked <= 10:
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: политика")
+                    continue
                 
                 # Подсчитываем активность (реакции + комментарии)
                 views = getattr(message, 'views', 0) or 0
@@ -359,7 +365,7 @@ class DigestGenerator:
                 debug_info += f"• Проверено сообщений: {total_messages_checked}\n"
                 debug_info += f"• Период поиска: {start_date.strftime('%d.%m.%Y %H:%M')} - {end_date.strftime('%d.%m.%Y %H:%M')}\n"
                 debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}\n"
-                debug_info += f"• Фильтры: реакции/комментарии > 0, исключен 'ночной чат', обязательно @{channel_username}\n"
+                debug_info += f"• Фильтры: реакции/комментарии > 0, исключен 'ночной чат', исключена #политика, обязательно @{channel_username}\n"
                 if regional_keywords:
                     debug_info += f"• Региональные слова: {', '.join(regional_keywords[:5])}..."
                 else:
