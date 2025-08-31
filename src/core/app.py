@@ -206,6 +206,11 @@ class NewsMonitorWithBot:
         self.system_monitor = self.lifecycle_manager.system_monitor
         self.web_interface = self.lifecycle_manager.web_interface
         
+        # ВАЖНО: Устанавливаем ссылку на monitor_bot для дайджестов
+        if self.telegram_bot:
+            self.telegram_bot.monitor_bot = self
+            logger.info("✅ Monitor bot установлен в Telegram бота")
+        
         # Инициализируем мониторинг компоненты
         if self.telegram_monitor:
             self.message_processor = MessageProcessor(self.database, self)

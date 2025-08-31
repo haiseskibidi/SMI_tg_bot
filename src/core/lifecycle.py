@@ -82,8 +82,8 @@ class LifecycleManager:
                 memory_limit_mb=system_config.get('memory_limit_mb', 800)
             )
             
-            # 3. Telegram бот (ОСНОВНОЙ КАНАЛ СВЯЗИ)
-            self.telegram_bot = await create_bot_from_config(config, None)  # TODO: передать monitor instance
+            # 3. Telegram бот (ОСНОВНОЙ КАНАЛ СВЯЗИ) - временно без monitor_bot
+            self.telegram_bot = await create_bot_from_config(config, None)
             if not self.telegram_bot:
                 logger.error("❌ Не удалось создать Telegram бота")
                 return False

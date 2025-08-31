@@ -272,21 +272,21 @@ class BasicCommands:
     def _init_digest_generator(self):
         """Инициализация генератора дайджестов"""
         try:
-            logger.debug(f"🔍 Проверяем доступ к monitor_bot: {self.bot.monitor_bot}")
+            logger.debug(f"🔍 Проверяем доступ к monitor_bot: {self.bot.monitor_bot is not None}")
             
             if self.bot.monitor_bot:
                 logger.debug(f"🔍 Monitor_bot найден, проверяем database: {hasattr(self.bot.monitor_bot, 'database')}")
                 
-                if hasattr(self.bot.monitor_bot, 'database'):
-                    logger.debug(f"🔍 Database найдена: {self.bot.monitor_bot.database}")
+                if hasattr(self.bot.monitor_bot, 'database') and self.bot.monitor_bot.database:
+                    logger.debug(f"🔍 Database найдена и не None")
                     
                     from src.digest_generator import DigestGenerator
                     self.digest_generator = DigestGenerator(self.bot.monitor_bot.database)
                     logger.info("✅ Генератор дайджестов инициализирован успешно")
                 else:
-                    logger.warning("⚠️ У monitor_bot нет атрибута 'database'")
+                    logger.warning("⚠️ У monitor_bot нет атрибута 'database' или database равна None")
             else:
-                logger.warning("⚠️ monitor_bot равен None")
+                logger.warning("⚠️ monitor_bot равен None - дожидаемся инициализации")
                 
         except Exception as e:
             logger.error(f"❌ Ошибка инициализации генератора дайджестов: {e}")
@@ -305,9 +305,12 @@ class BasicCommands:
             if not self.digest_generator:
                 error_msg = "❌ Генератор дайджестов недоступен\n\n"
                 if not self.bot.monitor_bot:
-                    error_msg += "Причина: Monitor bot не инициализирован"
+                    error_msg += "Причина: Monitor bot не инициализирован\n"
+                    error_msg += "💡 Попробуйте позже, система еще загружается"
                 elif not hasattr(self.bot.monitor_bot, 'database'):
-                    error_msg += "Причина: База данных не найдена"
+                    error_msg += "Причина: База данных не найдена в monitor_bot"
+                elif not self.bot.monitor_bot.database:
+                    error_msg += "Причина: База данных равна None"
                 else:
                     error_msg += "Причина: Неизвестная ошибка инициализации"
                 
