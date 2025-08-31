@@ -85,6 +85,8 @@ regions:
       username: newskaminform
     - title: Канал @ukmokrug
       username: ukmokrug
+    - title: Канал @bondarenko_ukmo
+      username: bondarenko_ukmo
     name: 🌋 Камчатка
   sakhalin:
     channels:
