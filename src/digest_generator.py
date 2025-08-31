@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from loguru import logger
 import pytz
+import re
 
 
 class DigestGenerator:
@@ -395,10 +396,11 @@ class DigestGenerator:
         
         digest_lines = []
         for i, msg in enumerate(messages, 1):
-            # Первые 60 символов текста
-            text_preview = msg['text'][:60].replace('\n', ' ').strip()
-            if len(msg['text']) > 60:
-                text_preview += "..."
+            # Очищаем текст от форматирования и лишних эмодзи
+            clean_text = self._clean_message_text(msg['text'])
+            
+            # Умная обрезка по словам (максимум 80 символов)
+            text_preview = self._smart_truncate(clean_text, 80)
             
             # Детальная статистика активности
             reactions = msg['reactions_count']
@@ -413,12 +415,12 @@ class DigestGenerator:
             
             activity_str = " ".join(activity_parts) if activity_parts else "0 активности"
             
-            line = f"⚡️ {text_preview} ({msg['url']}) [{activity_str}]"
+            line = f"{i}. {text_preview}\n   🔗 {msg['url']} [{activity_str}]"
             digest_lines.append(line)
         
         footer = "\n\nЭти новости собрали больше всего реакций и комментариев от читателей. А вам что больше всего запомнилось?"
         
-        return header + "\n".join(digest_lines) + footer
+        return header + "\n\n".join(digest_lines) + footer
 
     def _generate_empty_digest_for_channel(
         self, 
@@ -540,3 +542,38 @@ class DigestGenerator:
             return True
         
         return False
+
+    def _clean_message_text(self, text: str) -> str:
+        """Очистка текста сообщения от форматирования и лишних символов"""
+        # Убираем markdown форматирование
+        text = text.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
+        
+        # Убираем повторяющиеся эмодзи в начале строки
+        text = re.sub(r'^(\s*[^\w\s]+\s*){2,}', '', text)
+        
+        # Убираем лишние пробелы и переносы строк
+        text = ' '.join(text.split())
+        
+        # Убираем упоминания каналов из текста (они уже есть в статистике)
+        text = re.sub(r'@\w+', '', text)
+        
+        return text.strip()
+
+    def _smart_truncate(self, text: str, max_length: int) -> str:
+        """Умная обрезка текста по словам"""
+        if len(text) <= max_length:
+            return text
+        
+        # Обрезаем по словам
+        words = text.split()
+        result = ""
+        
+        for word in words:
+            if len(result + " " + word) <= max_length - 3:  # -3 для "..."
+                if result:
+                    result += " "
+                result += word
+            else:
+                break
+        
+        return result + "..." if result != text else text
