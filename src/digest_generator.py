@@ -305,6 +305,13 @@ class DigestGenerator:
                         logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет реакций/комментариев (replies={replies}, reactions={reactions_count})")
                     continue
                 
+                # Обязательная проверка на наличие тега канала
+                channel_tag = f"@{channel_username}"
+                if channel_tag not in text_lower:
+                    if total_messages_checked <= 10:
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет тега {channel_tag}")
+                    continue
+
                 # Региональная фильтрация
                 regional_keywords = self._get_regional_keywords(channel_username)
                 if regional_keywords:
@@ -351,7 +358,7 @@ class DigestGenerator:
                 debug_info += f"• Проверено сообщений: {total_messages_checked}\n"
                 debug_info += f"• Период поиска: {start_date.strftime('%d.%m.%Y %H:%M')} - {end_date.strftime('%d.%m.%Y %H:%M')}\n"
                 debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}\n"
-                debug_info += f"• Фильтры: реакции/комментарии > 0, исключен 'ночной чат'\n"
+                debug_info += f"• Фильтры: реакции/комментарии > 0, исключен 'ночной чат', обязательно @{channel_username}\n"
                 if regional_keywords:
                     debug_info += f"• Региональные слова: {', '.join(regional_keywords[:5])}..."
                 else:
