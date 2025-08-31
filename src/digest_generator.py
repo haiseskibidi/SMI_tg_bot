@@ -17,6 +17,7 @@ class DigestGenerator:
         self.db = database_manager
         self.telegram_monitor = telegram_monitor
         self.vladivostok_tz = pytz.timezone("Asia/Vladivostok")
+        self._last_digest_data = None  # Для хранения данных пагинации
     
     async def generate_weekly_digest(
         self, 
@@ -230,8 +231,9 @@ class DigestGenerator:
                 start_date = self.vladivostok_tz.localize(start_date)
                 end_date = self.vladivostok_tz.localize(end_date.replace(hour=23, minute=59, second=59))
             else:
-                end_date = datetime.now(self.vladivostok_tz)
-                start_date = end_date - timedelta(days=days)
+                # Правильная логика: полные дни
+                end_date = datetime.now(self.vladivostok_tz).replace(hour=23, minute=59, second=59, microsecond=0)
+                start_date = (end_date - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
             
             logger.info(f"📰 Читаем сообщения из @{channel_username} за период {start_date.date()} - {end_date.date()}")
 
@@ -305,28 +307,22 @@ class DigestGenerator:
                     for reaction in message.reactions.results:
                         reactions_count += reaction.count
                 
-                # Фильтруем только по реакциям и комментариям (НЕ по просмотрам)
+                # Ослабленный фильтр активности: либо много просмотров, либо есть реакции/комментарии
                 engagement = replies + reactions_count
-                if engagement == 0:
+                if engagement == 0 and views < 1000:  # Разрешаем посты с большими просмотрами
                     if total_messages_checked <= 10:
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет реакций/комментариев (replies={replies}, reactions={reactions_count})")
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: мало активности (views={views}, replies={replies}, reactions={reactions_count})")
                     continue
                 
-                # Обязательная проверка на наличие тега канала
+                # Проверка тега канала (бонус к популярности, но не обязательно)
                 channel_tag = f"@{channel_username}"
-                if channel_tag not in text_lower:
-                    if total_messages_checked <= 10:
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет тега {channel_tag}")
-                    continue
+                has_channel_tag = channel_tag in text_lower
 
-                # Региональная фильтрация
+                # Региональная проверка (бонус к популярности, но не обязательно)
                 regional_keywords = self._get_regional_keywords(channel_username)
+                is_regional_news = False
                 if regional_keywords:
                     is_regional_news = any(keyword in text_lower for keyword in regional_keywords)
-                    if not is_regional_news:
-                        if total_messages_checked <= 10:
-                            logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: не относится к региону")
-                        continue
                 
                 logger.info(f"✅ Сообщение #{total_messages_checked} подходит! Дата: {message_date}, реакции: {reactions_count}, комментарии: {replies}, текст: '{message.text[:50]}'")
                 
@@ -343,12 +339,18 @@ class DigestGenerator:
                 }
                 
                 # Вычисляем популярность (акцент на реакции и комментарии)
-                message_data['popularity_score'] = (
+                popularity_base = (
                     message_data['replies'] * 10 +      # Комментарии - самое важное
                     message_data['reactions_count'] * 8 + # Реакции - очень важно
                     message_data['forwards'] * 3 +       # Репосты - важно
                     message_data['views'] * 0.1          # Просмотры - минимальный вес
                 )
+                
+                # Бонусы за качество контента
+                channel_tag_bonus = 1.5 if has_channel_tag else 1.0    # +50% за тег канала
+                regional_bonus = 1.3 if is_regional_news else 1.0       # +30% за региональность
+                
+                message_data['popularity_score'] = popularity_base * channel_tag_bonus * regional_bonus
                 
                 messages.append(message_data)
                 
@@ -365,25 +367,39 @@ class DigestGenerator:
                 debug_info += f"• Проверено сообщений: {total_messages_checked}\n"
                 debug_info += f"• Период поиска: {start_date.strftime('%d.%m.%Y %H:%M')} - {end_date.strftime('%d.%m.%Y %H:%M')}\n"
                 debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}\n"
-                debug_info += f"• Фильтры: реакции/комментарии > 0, исключен 'ночной чат', исключена #политика, обязательно @{channel_username}\n"
+                debug_info += f"• Фильтры: активность > 0 ИЛИ просмотры > 1000, исключен 'ночной чат', исключена #политика\n"
+                debug_info += f"• Бонусы: +50% за @{channel_username}, +30% за региональность\n"
                 if regional_keywords:
                     debug_info += f"• Региональные слова: {', '.join(regional_keywords[:5])}..."
                 else:
-                    debug_info += f"• Региональный фильтр отключен для канала @{channel_username}"
+                    debug_info += f"• Региональный бонус отключен для канала @{channel_username}"
                 
                 empty_digest = self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
                 return empty_digest + debug_info
             
-            # Сортируем по популярности
-            top_messages = sorted(messages, key=lambda x: x['popularity_score'], reverse=True)[:limit]
+            # Сортируем по популярности и берем топ-30 для пагинации
+            all_top_messages = sorted(messages, key=lambda x: x['popularity_score'], reverse=True)[:30]
             
-            # Форматируем результат
-            return self._format_live_digest(
-                top_messages, 
+            # Сохраняем данные для пагинации (временное решение)
+            self._last_digest_data = {
+                'messages': all_top_messages,
+                'start_date': start_date.strftime('%d.%m.%Y'),
+                'end_date': end_date.strftime('%d.%m.%Y'),
+                'channel_username': channel_username
+            }
+            
+            # Форматируем результат с пагинацией
+            digest_result = self._format_live_digest_with_pagination(
+                all_top_messages, 
                 start_date.strftime('%d.%m.%Y'),
                 end_date.strftime('%d.%m.%Y'),
-                channel_username
+                channel_username,
+                page=1,  # Показываем первую страницу (1-10)
+                limit=limit
             )
+            
+            # Возвращаем только текст для совместимости (кнопки обработаем отдельно)
+            return digest_result
             
         except Exception as e:
             logger.error(f"❌ Ошибка генерации live дайджеста: {e}")
@@ -427,6 +443,106 @@ class DigestGenerator:
         footer = "\n\nЭти новости собрали больше всего реакций и комментариев от читателей. А вам что больше всего запомнилось?"
         
         return header + "\n\n".join(digest_lines) + footer
+
+    def _format_live_digest_with_pagination(
+        self, 
+        all_messages: List[Dict[str, Any]], 
+        start_date: str, 
+        end_date: str,
+        channel_username: str,
+        page: int = 1,
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """Форматирование дайджеста для канала с пагинацией"""
+        
+        # Вычисляем границы для текущей страницы
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        messages_on_page = all_messages[start_idx:end_idx]
+        
+        # Заголовок с информацией о странице
+        total_messages = len(all_messages)
+        if page == 1:
+            header = f"📰 Топ-{len(messages_on_page)} самых обсуждаемых новостей из канала @{channel_username} за неделю\n"
+        else:
+            news_range = f"{start_idx + 1}-{min(end_idx, total_messages)}"
+            header = f"📰 Новости {news_range} из топ-{total_messages} канала @{channel_username} за неделю\n"
+        
+        header += f"📅 Период: {start_date} - {end_date}\n\n"
+        
+        # Форматируем новости на текущей странице
+        digest_lines = []
+        for i, msg in enumerate(messages_on_page, start_idx + 1):
+            # Очищаем текст от форматирования и лишних эмодзи
+            clean_text = self._clean_message_text(msg['text'])
+            
+            # Умная обрезка по словам (максимум 80 символов)
+            text_preview = self._smart_truncate(clean_text, 80)
+            
+            # Детальная статистика активности
+            reactions = msg['reactions_count']
+            replies = msg['replies']
+            
+            # Формируем строку активности
+            activity_parts = []
+            if reactions > 0:
+                activity_parts.append(f"👍{reactions}")
+            if replies > 0:
+                activity_parts.append(f"💬{replies}")
+            
+            activity_str = " ".join(activity_parts) if activity_parts else "0 активности"
+            
+            line = f"{i}. {text_preview}\n   🔗 {msg['url']} [{activity_str}]"
+            digest_lines.append(line)
+        
+        # Создаем кнопки пагинации
+        pagination_buttons = []
+        
+        # Кнопка "Показать еще" только если есть следующие страницы
+        if page == 1 and total_messages > 10:
+            pagination_buttons.append([
+                {"text": f"📄 Показать еще (11-{min(20, total_messages)})", 
+                 "callback_data": f"digest_page_{channel_username}_{page + 1}"}
+            ])
+        elif page == 2 and total_messages > 20:
+            pagination_buttons.append([
+                {"text": f"📄 Показать еще (21-{min(30, total_messages)})", 
+                 "callback_data": f"digest_page_{channel_username}_{page + 1}"}
+            ])
+        
+        # Кнопка "Назад" если не первая страница
+        if page > 1:
+            if page == 2:
+                pagination_buttons.append([
+                    {"text": "🔙 Вернуться к топ-10", 
+                     "callback_data": f"digest_page_{channel_username}_1"}
+                ])
+            else:
+                pagination_buttons.append([
+                    {"text": f"🔙 Назад (11-20)", 
+                     "callback_data": f"digest_page_{channel_username}_{page - 1}"}
+                ])
+        
+        # Основные кнопки
+        main_buttons = [
+            [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
+            [{"text": "🏠 Главное меню", "callback_data": "start"}]
+        ]
+        
+        footer = "\n\nЭти новости собрали больше всего реакций и комментариев от читателей. А вам что больше всего запомнилось?"
+        
+        text = header + "\n\n".join(digest_lines) + footer
+        keyboard = pagination_buttons + main_buttons
+        
+        # Возвращаем и текст и клавиатуру
+        return {
+            'text': text,
+            'keyboard': keyboard,
+            'all_messages': all_messages,  # Сохраняем для других страниц
+            'channel_username': channel_username,
+            'start_date': start_date,
+            'end_date': end_date
+        }
 
     def _generate_empty_digest_for_channel(
         self, 
@@ -583,3 +699,39 @@ class DigestGenerator:
                 break
         
         return result + "..." if result != text else text
+
+    async def get_digest_page(self, channel_username: str, page: int) -> Dict[str, Any]:
+        """Получить конкретную страницу дайджеста"""
+        try:
+            # Проверяем, есть ли сохраненные данные
+            if not hasattr(self, '_last_digest_data') or not self._last_digest_data:
+                return {
+                    'text': "❌ Данные дайджеста не найдены. Сгенерируйте новый дайджест.",
+                    'keyboard': [[{"text": "📰 Новый дайджест", "callback_data": "digest"}]]
+                }
+            
+            data = self._last_digest_data
+            
+            # Проверяем, тот ли канал
+            if data['channel_username'] != channel_username:
+                return {
+                    'text': "❌ Данные дайджеста устарели. Сгенерируйте новый дайджест.",
+                    'keyboard': [[{"text": "📰 Новый дайджест", "callback_data": "digest"}]]
+                }
+            
+            # Форматируем нужную страницу
+            return self._format_live_digest_with_pagination(
+                data['messages'],
+                data['start_date'],
+                data['end_date'],
+                data['channel_username'],
+                page=page,
+                limit=10
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения страницы дайджеста: {e}")
+            return {
+                'text': f"❌ Ошибка получения страницы: {e}",
+                'keyboard': [[{"text": "📰 Новый дайджест", "callback_data": "digest"}]]
+            }

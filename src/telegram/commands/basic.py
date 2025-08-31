@@ -382,20 +382,20 @@ class BasicCommands:
             # Генерируем дайджест напрямую из канала
             if channel:
                 logger.info(f"📰 Генерируем live дайджест для канала @{channel}")
-                digest_text = await self.digest_generator.generate_channel_digest_live(
+                digest_result = await self.digest_generator.generate_channel_digest_live(
                     channel_username=channel,
                     days=days,
                     limit=10
                 )
             else:
                 # Если канал не указан, используем старый метод с базой данных
-                digest_text = await self.digest_generator.generate_weekly_digest(
+                digest_result = await self.digest_generator.generate_weekly_digest(
                     channel=None,
                     days=days,
                     limit=10
                 )
             
-            return digest_text
+            return digest_result
 
         except Exception as e:
             logger.error(f"❌ Ошибка генерации дайджеста для канала {channel}: {e}")
@@ -420,15 +420,19 @@ class BasicCommands:
             
             # Используем сохраненный период из команды digest
             days = getattr(self.bot, 'digest_days', 7)
-            digest_text = await self.generate_digest_for_channel(channel_username, days)
+            digest_result = await self.generate_digest_for_channel(channel_username, days)
             
-            # Отправляем результат
-            keyboard = [
-                [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
-                [{"text": "🏠 Главное меню", "callback_data": "start"}]
-            ]
-            
-            await self.bot.send_message_with_keyboard(digest_text, keyboard)
+            # Обрабатываем результат с пагинацией
+            if isinstance(digest_result, dict):
+                # Новый формат с пагинацией
+                await self.bot.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'])
+            else:
+                # Старый формат (строка) - добавляем базовые кнопки
+                keyboard = [
+                    [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
+                    [{"text": "🏠 Главное меню", "callback_data": "start"}]
+                ]
+                await self.bot.send_message_with_keyboard(digest_result, keyboard)
             return True
             
         except Exception as e:

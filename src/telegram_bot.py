@@ -769,6 +769,8 @@ class TelegramBot:
                 await self.cmd_force_subscribe(callback_message)
             elif data == "digest":
                 await self.basic_commands.digest(callback_message)
+            elif data.startswith("digest_page_"):
+                await self.handle_digest_page_callback(data, callback_message)
             elif data.startswith("digest_"):
                 await self.handle_digest_callback(data, callback_message)
             elif data.startswith("region_bulk_"):
@@ -2977,19 +2979,52 @@ class TelegramBot:
                 await self.send_message("📰 Генерируем дайджест для всех каналов, подождите...")
             
             # Генерируем дайджест
-            digest_text = await self.basic_commands.generate_digest_for_channel(channel, days)
+            digest_result = await self.basic_commands.generate_digest_for_channel(channel, days)
             
-            # Отправляем результат
-            keyboard = [
-                [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
-                [{"text": "🏠 Главное меню", "callback_data": "start"}]
-            ]
-            
-            await self.send_message_with_keyboard(digest_text, keyboard)
+            # Обрабатываем результат с пагинацией
+            if isinstance(digest_result, dict):
+                # Новый формат с пагинацией
+                await self.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'])
+            else:
+                # Старый формат (строка) - добавляем базовые кнопки
+                keyboard = [
+                    [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
+                    [{"text": "🏠 Главное меню", "callback_data": "start"}]
+                ]
+                await self.send_message_with_keyboard(digest_result, keyboard)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки дайджеста: {e}")
             await self.send_message(f"❌ Ошибка генерации дайджеста: {e}")
+
+    async def handle_digest_page_callback(self, data: str, message: Optional[Dict[str, Any]]) -> None:
+        """Обработка callback'ов пагинации дайджеста"""
+        try:
+            # Формат: digest_page_channel_username_page_number
+            parts = data.split("_")
+            if len(parts) < 4:
+                await self.send_message("❌ Некорректный формат callback для пагинации")
+                return
+            
+            channel_username = parts[2]
+            page = int(parts[3])
+            
+            logger.info(f"📄 Запрос страницы {page} дайджеста для @{channel_username}")
+            
+            # Получаем нужную страницу дайджеста
+            if hasattr(self.basic_commands, 'digest_generator') and self.basic_commands.digest_generator:
+                page_result = await self.basic_commands.digest_generator.get_digest_page(channel_username, page)
+                
+                if isinstance(page_result, dict):
+                    await self.send_message_with_keyboard(page_result['text'], page_result['keyboard'])
+                else:
+                    await self.send_message("❌ Ошибка получения страницы дайджеста")
+            else:
+                await self.send_message("❌ Генератор дайджестов недоступен")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки пагинации дайджеста: {e}")
+            await self.send_message(f"❌ Ошибка получения страницы: {e}")
 
 
 # Функция для создания бота из конфигурации
