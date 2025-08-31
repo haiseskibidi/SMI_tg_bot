@@ -281,8 +281,13 @@ class BasicCommands:
                     logger.debug(f"🔍 Database найдена и не None")
                     
                     from src.digest_generator import DigestGenerator
-                    self.digest_generator = DigestGenerator(self.bot.monitor_bot.database)
-                    logger.info("✅ Генератор дайджестов инициализирован успешно")
+                    # Передаем как database, так и telegram_monitor
+                    telegram_monitor = getattr(self.bot.monitor_bot, 'telegram_monitor', None)
+                    self.digest_generator = DigestGenerator(
+                        self.bot.monitor_bot.database, 
+                        telegram_monitor
+                    )
+                    logger.info("✅ Генератор дайджестов инициализирован успешно с telegram_monitor")
                 else:
                     logger.warning("⚠️ У monitor_bot нет атрибута 'database' или database равна None")
             else:
@@ -374,12 +379,21 @@ class BasicCommands:
             if not self.digest_generator:
                 return "❌ Генератор дайджестов недоступен"
 
-            # Генерируем дайджест
-            digest_text = await self.digest_generator.generate_weekly_digest(
-                channel=channel,
-                days=days,
-                limit=10
-            )
+            # Генерируем дайджест напрямую из канала
+            if channel:
+                logger.info(f"📰 Генерируем live дайджест для канала @{channel}")
+                digest_text = await self.digest_generator.generate_channel_digest_live(
+                    channel_username=channel,
+                    days=days,
+                    limit=10
+                )
+            else:
+                # Если канал не указан, используем старый метод с базой данных
+                digest_text = await self.digest_generator.generate_weekly_digest(
+                    channel=None,
+                    days=days,
+                    limit=10
+                )
             
             return digest_text
 

@@ -12,8 +12,9 @@ import pytz
 class DigestGenerator:
     """Генератор дайджестов новостей"""
     
-    def __init__(self, database_manager):
+    def __init__(self, database_manager, telegram_monitor=None):
         self.db = database_manager
+        self.telegram_monitor = telegram_monitor
         self.vladivostok_tz = pytz.timezone("Asia/Vladivostok")
     
     async def generate_weekly_digest(
@@ -195,4 +196,162 @@ class DigestGenerator:
             "Или отправьте команду:\n"
             "<code>/digest 14</code> - для 14 дней\n"
             "<code>/digest 2025-01-01 2025-01-07</code> - для своего периода"
+        )
+
+    async def generate_channel_digest_live(
+        self, 
+        channel_username: str,
+        days: int = 7,
+        limit: int = 10,
+        custom_start_date: Optional[str] = None,
+        custom_end_date: Optional[str] = None
+    ) -> str:
+        """
+        Генерировать дайджест канала, читая сообщения напрямую из Telegram
+        
+        Args:
+            channel_username: Username канала (без @)
+            days: Количество дней назад (по умолчанию 7)
+            limit: Максимальное количество новостей (по умолчанию 10)
+            custom_start_date: Начальная дата в формате 'YYYY-MM-DD'
+            custom_end_date: Конечная дата в формате 'YYYY-MM-DD'
+        """
+        try:
+            if not self.telegram_monitor or not hasattr(self.telegram_monitor, 'client'):
+                logger.error("❌ Telegram monitor или client недоступен")
+                return "❌ Не удалось подключиться к Telegram для чтения канала"
+
+            # Определяем период
+            if custom_start_date and custom_end_date:
+                start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
+                end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
+            else:
+                end_date = datetime.now(self.vladivostok_tz).replace(tzinfo=None)
+                start_date = end_date - timedelta(days=days)
+            
+            logger.info(f"📰 Читаем сообщения из @{channel_username} за период {start_date.date()} - {end_date.date()}")
+
+            # Получаем entity канала
+            try:
+                if channel_username.startswith('@'):
+                    channel_username = channel_username[1:]
+                
+                entity = await self.telegram_monitor.client.get_entity(channel_username)
+                logger.info(f"✅ Получили entity для канала @{channel_username}")
+            except Exception as e:
+                logger.error(f"❌ Не удалось получить канал @{channel_username}: {e}")
+                return f"❌ Канал @{channel_username} не найден или недоступен"
+
+            # Читаем сообщения
+            messages = []
+            async for message in self.telegram_monitor.client.iter_messages(
+                entity, 
+                limit=None,
+                offset_date=start_date,
+                reverse=False
+            ):
+                # Фильтруем по дате
+                if message.date < start_date or message.date > end_date:
+                    continue
+                    
+                # Пропускаем сообщения без текста
+                if not message.text or len(message.text.strip()) < 10:
+                    continue
+                
+                # Собираем данные о сообщении
+                message_data = {
+                    'id': message.id,
+                    'text': message.text,
+                    'date': message.date,
+                    'views': getattr(message, 'views', 0) or 0,
+                    'forwards': getattr(message, 'forwards', 0) or 0,
+                    'replies': getattr(message.replies, 'replies', 0) if message.replies else 0,
+                    'reactions_count': 0,
+                    'url': f"https://t.me/{channel_username}/{message.id}"
+                }
+                
+                # Подсчитываем реакции
+                if hasattr(message, 'reactions') and message.reactions:
+                    reactions_count = 0
+                    for reaction in message.reactions.results:
+                        reactions_count += reaction.count
+                    message_data['reactions_count'] = reactions_count
+                
+                # Вычисляем популярность
+                message_data['popularity_score'] = (
+                    message_data['views'] + 
+                    message_data['forwards'] * 2 + 
+                    message_data['replies'] * 3 + 
+                    message_data['reactions_count'] * 5
+                )
+                
+                messages.append(message_data)
+                
+                # Если дошли до начала периода
+                if message.date < start_date:
+                    break
+
+            logger.info(f"📊 Найдено {len(messages)} сообщений в канале @{channel_username}")
+            
+            if not messages:
+                return self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
+            
+            # Сортируем по популярности
+            top_messages = sorted(messages, key=lambda x: x['popularity_score'], reverse=True)[:limit]
+            
+            # Форматируем результат
+            return self._format_live_digest(
+                top_messages, 
+                start_date.strftime('%d.%m.%Y'),
+                end_date.strftime('%d.%m.%Y'),
+                channel_username
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка генерации live дайджеста: {e}")
+            return f"❌ Ошибка чтения канала: {e}"
+
+    def _format_live_digest(
+        self, 
+        messages: List[Dict[str, Any]], 
+        start_date: str, 
+        end_date: str,
+        channel_username: str
+    ) -> str:
+        """Форматирование дайджеста для канала (live)"""
+        header = f"📰 Собрали топ самых обсуждаемых новостей из канала @{channel_username} за неделю\n"
+        header += f"📅 Период: {start_date} - {end_date}\n\n"
+        
+        digest_lines = []
+        for i, msg in enumerate(messages, 1):
+            # Первые 50 символов текста
+            text_preview = msg['text'][:50].replace('\n', ' ').strip()
+            if len(msg['text']) > 50:
+                text_preview += "..."
+            
+            # Статистика
+            total_engagement = msg['views'] + msg['forwards'] + msg['replies'] + msg['reactions_count']
+            
+            line = f"⚡️ {text_preview} ({msg['url']}) [{total_engagement} реакций]"
+            digest_lines.append(line)
+        
+        footer = "\n\nЭти новости собрали больше всего реакций и комментариев от читателей. А вам что больше всего запомнилось?"
+        
+        return header + "\n".join(digest_lines) + footer
+
+    def _generate_empty_digest_for_channel(
+        self, 
+        channel_username: str, 
+        start_date: datetime, 
+        end_date: datetime
+    ) -> str:
+        """Генерация пустого дайджеста для канала"""
+        return (
+            f"📰 Дайджест канала @{channel_username}\n"
+            f"📅 Период: {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}\n\n"
+            f"😔 В канале @{channel_username} не найдено новостей за указанный период.\n\n"
+            f"💡 Попробуйте:\n"
+            f"• Увеличить период поиска\n"
+            f"• Проверить правильность названия канала\n"
+            f"• Убедиться, что канал публичный"
         )
