@@ -2941,28 +2941,41 @@ class TelegramBot:
     async def handle_digest_callback(self, data: str, message: Optional[Dict[str, Any]]) -> None:
         """Обработка callback'ов дайджеста"""
         try:
-            # Парсим данные: digest_region_days
-            parts = data.split("_")
-            if len(parts) >= 3:
-                region = parts[1] if parts[1] != "all" else None
-                days = int(parts[2]) if parts[2].isdigit() else 7
+            # Парсим данные для каналов
+            if data.startswith("digest_all_channels_"):
+                # Формат: digest_all_channels_7
+                days = int(data.split("_")[-1]) if data.split("_")[-1].isdigit() else 7
+                channel = None
                 
-                # Показываем процесс генерации
-                await self.send_message("📰 Генерируем дайджест, подождите...")
-                
-                # Генерируем дайджест
-                digest_text = await self.basic_commands.generate_digest_for_region(region, days)
-                
-                # Отправляем результат
-                keyboard = [
-                    [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
-                    [{"text": "🏠 Главное меню", "callback_data": "start"}]
-                ]
-                
-                await self.send_message_with_keyboard(digest_text, keyboard)
-                
+            elif data.startswith("digest_channel_"):
+                # Формат: digest_channel_channelname_7
+                parts = data.split("_")
+                if len(parts) >= 4:
+                    channel = parts[2]  # channelname
+                    days = int(parts[3]) if parts[3].isdigit() else 7
+                else:
+                    await self.send_message("❌ Некорректные параметры канала")
+                    return
             else:
-                await self.send_message("❌ Некорректные параметры дайджеста")
+                await self.send_message("❌ Некорректный формат callback")
+                return
+                
+            # Показываем процесс генерации
+            if channel:
+                await self.send_message(f"📰 Генерируем дайджест для @{channel}, подождите...")
+            else:
+                await self.send_message("📰 Генерируем дайджест для всех каналов, подождите...")
+            
+            # Генерируем дайджест
+            digest_text = await self.basic_commands.generate_digest_for_channel(channel, days)
+            
+            # Отправляем результат
+            keyboard = [
+                [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
+                [{"text": "🏠 Главное меню", "callback_data": "start"}]
+            ]
+            
+            await self.send_message_with_keyboard(digest_text, keyboard)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки дайджеста: {e}")

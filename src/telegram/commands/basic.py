@@ -14,6 +14,8 @@ class BasicCommands:
     def __init__(self, bot: "TelegramBot") -> None:
         self.bot = bot
         self.digest_generator = None
+        # Инициализируем генератор дайджестов
+        self._init_digest_generator()
 
     async def start(self, message: Optional[Dict[str, Any]]) -> None:
         chat_id = message.get("chat", {}).get("id") if message else self.bot.admin_chat_id
@@ -270,23 +272,46 @@ class BasicCommands:
     def _init_digest_generator(self):
         """Инициализация генератора дайджестов"""
         try:
-            if self.bot.monitor_bot and hasattr(self.bot.monitor_bot, 'database'):
-                from src.digest_generator import DigestGenerator
-                self.digest_generator = DigestGenerator(self.bot.monitor_bot.database)
-                logger.info("📰 Генератор дайджестов инициализирован")
+            logger.debug(f"🔍 Проверяем доступ к monitor_bot: {self.bot.monitor_bot}")
+            
+            if self.bot.monitor_bot:
+                logger.debug(f"🔍 Monitor_bot найден, проверяем database: {hasattr(self.bot.monitor_bot, 'database')}")
+                
+                if hasattr(self.bot.monitor_bot, 'database'):
+                    logger.debug(f"🔍 Database найдена: {self.bot.monitor_bot.database}")
+                    
+                    from src.digest_generator import DigestGenerator
+                    self.digest_generator = DigestGenerator(self.bot.monitor_bot.database)
+                    logger.info("✅ Генератор дайджестов инициализирован успешно")
+                else:
+                    logger.warning("⚠️ У monitor_bot нет атрибута 'database'")
             else:
-                logger.warning("⚠️ Нет доступа к базе данных для дайджестов")
+                logger.warning("⚠️ monitor_bot равен None")
+                
         except Exception as e:
             logger.error(f"❌ Ошибка инициализации генератора дайджестов: {e}")
+            import traceback
+            logger.error(f"📋 Traceback: {traceback.format_exc()}")
 
     async def digest(self, message: Optional[Dict[str, Any]]) -> None:
         """Генерация дайджеста топ новостей"""
         try:
+            logger.info("📰 Вызов команды digest")
+            
             if not self.digest_generator:
+                logger.warning("⚠️ Генератор дайджестов не инициализирован, пытаемся повторно")
                 self._init_digest_generator()
             
             if not self.digest_generator:
-                await self.bot.send_message("❌ Генератор дайджестов недоступен")
+                error_msg = "❌ Генератор дайджестов недоступен\n\n"
+                if not self.bot.monitor_bot:
+                    error_msg += "Причина: Monitor bot не инициализирован"
+                elif not hasattr(self.bot.monitor_bot, 'database'):
+                    error_msg += "Причина: База данных не найдена"
+                else:
+                    error_msg += "Причина: Неизвестная ошибка инициализации"
+                
+                await self.bot.send_message(error_msg)
                 return
 
             # Разбираем параметры команды если есть
@@ -310,31 +335,48 @@ class BasicCommands:
                 except ValueError:
                     pass
 
-            # Показываем меню выбора региона
-            keyboard = [
-                [{"text": "🌍 Все регионы", "callback_data": f"digest_all_{days}"}],
-                [{"text": "🔥 Камчатка", "callback_data": f"digest_kamchatka_{days}"}],
-                [{"text": "🌊 Сахалин", "callback_data": f"digest_sakhalin_{days}"}],
-                [{"text": "🏔️ Якутск", "callback_data": f"digest_yakutsk_{days}"}],
-                [{"text": "🏙️ Владивосток", "callback_data": f"digest_vladivostok_{days}"}],
-                [{"text": "🏠 Главное меню", "callback_data": "start"}],
-            ]
+            # Получаем список каналов с новостями  
+            available_channels = await self.digest_generator.get_available_channels(days)
+            
+            if not available_channels:
+                await self.bot.send_message("❌ Каналы с новостями не найдены")
+                return
 
-            region_text = "📰 <b>Выберите регион для дайджеста:</b>\n\n"
-            region_text += f"📅 Период: {days} дней\n\n"
-            region_text += "💡 <b>Примеры команд:</b>\n"
-            region_text += "• <code>/digest</code> - неделя, все регионы\n"
-            region_text += "• <code>/digest 14</code> - 14 дней\n"
-            region_text += "• <code>/digest 2025-01-01 2025-01-07</code> - свой период"
+            # Показываем меню выбора канала (топ-10 самых активных)
+            keyboard = []
+            
+            # Добавляем "Все каналы" как первую опцию
+            keyboard.append([{"text": "🌍 Все каналы", "callback_data": f"digest_all_channels_{days}"}])
+            
+            # Добавляем топ каналов (максимум 8)
+            for i, channel in enumerate(available_channels[:8]):
+                name = channel['name'][:25] + "..." if len(channel['name']) > 25 else channel['name']
+                emoji = "📺"
+                
+                # Показываем количество сообщений для понимания
+                msg_count = channel['messages_count']
+                text = f"{emoji} {name} ({msg_count})"
+                
+                keyboard.append([{"text": text, "callback_data": f"digest_channel_{channel['username']}_{days}"}])
+            
+            keyboard.append([{"text": "🏠 Главное меню", "callback_data": "start"}])
 
-            await self.bot.send_message_with_keyboard(region_text, keyboard)
+            channel_text = "📰 <b>Выберите канал для дайджеста:</b>\n\n"
+            channel_text += f"📅 Период: {days} дней\n"
+            channel_text += f"📊 Найдено каналов: {len(available_channels)}\n\n"
+            channel_text += "💡 <b>Примеры команд:</b>\n"
+            channel_text += "• <code>/digest</code> - неделя, все каналы\n"
+            channel_text += "• <code>/digest 14</code> - 14 дней\n"
+            channel_text += "• <code>/digest 2025-01-01 2025-01-07</code> - свой период"
+
+            await self.bot.send_message_with_keyboard(channel_text, keyboard)
 
         except Exception as e:
             logger.error(f"❌ Ошибка команды digest: {e}")
             await self.bot.send_message(f"❌ Ошибка генерации дайджеста: {e}")
 
-    async def generate_digest_for_region(self, region: Optional[str], days: int = 7) -> str:
-        """Генерация дайджеста для конкретного региона"""
+    async def generate_digest_for_channel(self, channel: Optional[str], days: int = 7) -> str:
+        """Генерация дайджеста для конкретного канала"""
         try:
             if not self.digest_generator:
                 self._init_digest_generator()
@@ -344,7 +386,7 @@ class BasicCommands:
 
             # Генерируем дайджест
             digest_text = await self.digest_generator.generate_weekly_digest(
-                region=region,
+                channel=channel,
                 days=days,
                 limit=10
             )
@@ -352,7 +394,7 @@ class BasicCommands:
             return digest_text
 
         except Exception as e:
-            logger.error(f"❌ Ошибка генерации дайджеста для региона {region}: {e}")
+            logger.error(f"❌ Ошибка генерации дайджеста для канала {channel}: {e}")
             return f"❌ Не удалось сгенерировать дайджест: {e}"
 
     async def topic_id(self, message: Optional[Dict[str, Any]]) -> None:

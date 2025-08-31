@@ -19,6 +19,7 @@ class DigestGenerator:
     async def generate_weekly_digest(
         self, 
         region: Optional[str] = None,
+        channel: Optional[str] = None,
         days: int = 7,
         limit: int = 10,
         custom_start_date: Optional[str] = None,
@@ -28,7 +29,8 @@ class DigestGenerator:
         Генерировать недельный дайджест топ-новостей
         
         Args:
-            region: Регион для фильтрации (None = все регионы)
+            region: Регион для фильтрации (None = все регионы) 
+            channel: Конкретный канал для фильтрации (приоритет над region)
             days: Количество дней назад (по умолчанию 7)
             limit: Максимальное количество новостей (по умолчанию 10)
             custom_start_date: Начальная дата в формате 'YYYY-MM-DD'
@@ -52,18 +54,20 @@ class DigestGenerator:
                 start_date=start_date,
                 end_date=end_date,
                 region=region,
+                channel=channel,
                 limit=limit
             )
             
             if not top_news:
-                return self._generate_empty_digest(start_formatted, end_formatted, region)
+                return self._generate_empty_digest(start_formatted, end_formatted, region, channel)
             
             # Генерируем текст дайджеста
             digest_text = self._format_digest(
                 top_news, 
                 start_formatted, 
                 end_formatted, 
-                region
+                region,
+                channel
             )
             
             logger.info(f"📰 Дайджест сгенерирован: {len(top_news)} новостей за {start_formatted}-{end_formatted}")
@@ -78,13 +82,21 @@ class DigestGenerator:
         news_list: List[Dict[str, Any]], 
         start_date: str, 
         end_date: str, 
-        region: Optional[str]
+        region: Optional[str],
+        channel: Optional[str] = None
     ) -> str:
         """Форматирование дайджеста в нужный вид"""
         
         # Заголовок
-        region_text = f" в регионе {region}" if region else ""
-        header = f"📰 Собрали топ самых обсуждаемых новостей{region_text} за неделю\n"
+        if channel:
+            channel_text = f" из канала @{channel}"
+            header = f"📰 Собрали топ самых обсуждаемых новостей{channel_text} за неделю\n"
+        elif region:
+            region_text = f" в регионе {region}"
+            header = f"📰 Собрали топ самых обсуждаемых новостей{region_text} за неделю\n"
+        else:
+            header = f"📰 Собрали топ самых обсуждаемых новостей за неделю\n"
+        
         header += f"📅 Период: {start_date} - {end_date}\n\n"
         
         # Новости
@@ -137,17 +149,22 @@ class DigestGenerator:
             logger.warning(f"⚠️ Не удалось создать ссылку: {e}")
             return None
     
-    def _generate_empty_digest(self, start_date: str, end_date: str, region: Optional[str]) -> str:
+    def _generate_empty_digest(self, start_date: str, end_date: str, region: Optional[str], channel: Optional[str] = None) -> str:
         """Генерация сообщения при отсутствии новостей"""
-        region_text = f" в регионе {region}" if region else ""
+        if channel:
+            source_text = f" из канала @{channel}"
+        elif region:
+            source_text = f" в регионе {region}"
+        else:
+            source_text = ""
         
         return (
-            f"📰 Дайджест новостей{region_text}\n"
+            f"📰 Дайджест новостей{source_text}\n"
             f"📅 Период: {start_date} - {end_date}\n\n"
             "🤷‍♂️ За указанный период новостей не найдено.\n\n"
             "Попробуйте:\n"
             "• Увеличить период поиска\n"
-            "• Выбрать другой регион\n"
+            "• Выбрать другой канал/регион\n"
             "• Проверить позже"
         )
     
@@ -157,6 +174,14 @@ class DigestGenerator:
             return await self.db.get_regions_with_news()
         except Exception as e:
             logger.error(f"❌ Ошибка получения регионов: {e}")
+            return []
+
+    async def get_available_channels(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Получить список доступных каналов с новостями"""
+        try:
+            return await self.db.get_channels_with_news(days)
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения каналов: {e}")
             return []
     
     def format_period_selection(self) -> str:
