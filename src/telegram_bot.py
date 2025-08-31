@@ -15,6 +15,9 @@ from datetime import datetime
 import json
 import pytz
 import yaml
+from src.telegram.commands.basic import BasicCommands
+from src.telegram.commands import ChannelCommands, RegionCommands, ManagementCommands
+from src.telegram.callbacks import ChannelCallbacks, RegionCallbacks
 
 
 class TelegramBot:
@@ -57,18 +60,24 @@ class TelegramBot:
         self.last_activity_time = 0
         
         # Регистрируем команды управления
-        self.register_command("start", self.cmd_start)
-        self.register_command("help", self.cmd_help)
-        self.register_command("status", self.cmd_status)
-        self.register_command("start_monitoring", self.cmd_start_monitoring)
-        self.register_command("stop_monitoring", self.cmd_stop_monitoring)
-        self.register_command("restart", self.cmd_restart)
-        self.register_command("topic_id", self.cmd_topic_id)
-        self.register_command("add_channel", self.cmd_add_channel)
-        self.register_command("manage_channels", self.cmd_manage_channels)
-        self.register_command("stats", self.cmd_stats)
-        self.register_command("settings", self.cmd_settings)
-        self.register_command("force_subscribe", self.cmd_force_subscribe)
+        self.basic_commands = BasicCommands(self)
+        self.channel_commands = ChannelCommands(self)
+        self.region_commands = RegionCommands(self)
+        self.management_commands = ManagementCommands(self)
+        self.channel_callbacks = ChannelCallbacks(self)
+        self.region_callbacks = RegionCallbacks(self)
+        self.register_command("start", self.basic_commands.start)
+        self.register_command("help", self.basic_commands.help)
+        self.register_command("status", self.basic_commands.status)
+        self.register_command("start_monitoring", self.basic_commands.start_monitoring)
+        self.register_command("stop_monitoring", self.basic_commands.stop_monitoring)
+        self.register_command("restart", self.basic_commands.restart)
+        self.register_command("topic_id", self.basic_commands.topic_id)
+        self.register_command("add_channel", self.channel_commands.add_channel)
+        self.register_command("manage_channels", self.management_commands.manage_channels)
+        self.register_command("stats", self.management_commands.stats)
+        self.register_command("settings", self.management_commands.settings)
+        self.register_command("force_subscribe", self.channel_commands.force_subscribe)
         
         asyncio.create_task(self.setup_bot_commands())
     
@@ -699,12 +708,12 @@ class TelegramBot:
             elif data == "status":
                 await self.cmd_status(callback_message)
             elif data == "channels":
-                await self.cmd_manage_channels(callback_message)
+                await self.management_commands.manage_channels(callback_message)
             elif data.startswith("channels_page_"):
                 page = int(data.replace("channels_page_", ""))
                 await self.show_channels_page(page)
             elif data == "stats":
-                await self.cmd_stats(callback_message)
+                await self.management_commands.stats(callback_message)
             elif data == "add_channel":
                 logger.info("🔧 Обрабатываем callback 'add_channel'")
                 add_text = (
@@ -722,15 +731,15 @@ class TelegramBot:
                 await self.remove_channel_handler(channel_name)
             elif data == "toggle_delete":
                 self.delete_commands = not self.delete_commands
-                await self.cmd_settings(callback_message)
+                await self.management_commands.settings(callback_message)
             elif data == "toggle_edit":
                 self.edit_messages = not self.edit_messages
-                await self.cmd_settings(callback_message)
+                await self.management_commands.settings(callback_message)
             elif data == "clear_stats":
                 await self.clear_stats_handler()
             elif data == "settings":
                 logger.info("🔧 Обрабатываем callback 'settings'")
-                await self.cmd_settings(callback_message)
+                await self.management_commands.settings(callback_message)
             elif data == "help":
                 logger.info("🔧 Обрабатываем callback 'help'")  
                 await self.cmd_help(callback_message)
@@ -780,9 +789,9 @@ class TelegramBot:
                 self.pending_topic_data = None
                 await self.cmd_start(callback_message)
             elif data == "manage_channels":
-                await self.cmd_manage_channels(callback_message)
+                await self.management_commands.manage_channels(callback_message)
             elif data == "refresh_channels":
-                await self.cmd_manage_channels(callback_message)
+                await self.management_commands.manage_channels(callback_message)
             elif data.startswith("manage_region_"):
                 region_key = data.replace("manage_region_", "")
                 await self.show_region_channels(region_key)
@@ -1194,73 +1203,9 @@ class TelegramBot:
 
     async def cmd_start(self, message):
         """Команда /start - главное меню"""
-        # Определяем куда отправлять ответ
-        chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
-        to_group = self.is_message_from_group(chat_id) if chat_id else None
-        
-        keyboard = [
-            [{"text": "📊 Статус", "callback_data": "status"}, {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
-            [{"text": "📈 Статистика", "callback_data": "stats"}, {"text": "➕ Добавить канал", "callback_data": "add_channel"}],
-            [{"text": "🚀 Запуск", "callback_data": "start_monitoring"}, {"text": "🛑 Стоп", "callback_data": "stop_monitoring"}],
-            [{"text": "🔄 Рестарт", "callback_data": "restart"}, {"text": "⚙️ Настройки", "callback_data": "settings"}],
-            [{"text": "📡 Принудительная подписка", "callback_data": "force_subscribe"}, {"text": "🆘 Справка", "callback_data": "help"}]
-        ]
-        
-        welcome_text = (
-            "🤖 <b>Панель управления ботом мониторинга новостей</b>\n\n"
-            "📋 <b>Доступные команды:</b>\n"
-            "📊 /status - статус системы\n"
-            "🗂️ /manage_channels - управление каналами\n"
-            "➕ /add_channel - добавить канал\n"
-            "📈 /stats - статистика\n"
-            "🚀 /start_monitoring - запустить мониторинг\n"
-            "🛑 /stop - остановить мониторинг\n"
-            "🔄 /restart - перезапуск системы\n"
-            "📂 /topic_id - узнать ID темы в группе\n"
-            "📡 /force_subscribe - принудительная подписка на каналы\n"
-            "⚙️ /settings - настройки интерфейса\n\n"
-            "⌨️ <b>Или используйте кнопки ниже:</b>\n\n"
-            "⚠️ <b>В группе:</b> пишите команды в чат напрямую, не отвечайте на сообщения бота!"
-        )
-        
-        # Сначала удаляем старую клавиатуру если она есть
-        await self.remove_old_keyboard(to_group)
-        
-        await self.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=False, to_group=to_group)
+        await self.basic_commands.start(message)
     
-    async def cmd_manage_channels(self, message):
-        """Команда для управления каналами"""
-        try:
-            # Получаем список всех каналов из конфигурации
-            channels_data = await self.get_all_channels_grouped()
-            
-            if not channels_data:
-                keyboard = [
-                    [{"text": "➕ Добавить первый канал", "callback_data": "add_channel"}],
-                    [{"text": "🏠 Главное меню", "callback_data": "start"}]
-                ]
-                
-                # Определяем куда отправлять ответ
-                chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
-                to_group = self.is_message_from_group(chat_id) if chat_id else None
-                
-                await self.send_message_with_keyboard(
-                    "📂 <b>Управление каналами</b>\n\n"
-                    "❌ Каналы не найдены\n\n"
-                    "Добавьте первый канал для мониторинга!",
-                    keyboard,
-                    use_reply_keyboard=False,
-                    to_group=to_group
-                )
-                return
-            
-            # Показываем список каналов по регионам
-            await self.show_channels_management(channels_data, message)
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка управления каналами: {e}")
-            await self.send_command_response("❌ Произошла ошибка при загрузке каналов", message)
-    
+
     async def get_all_channels_grouped(self):
         """Получить все каналы, сгруппированные по регионам"""
         try:
@@ -1564,106 +1509,11 @@ class TelegramBot:
     
     async def cmd_help(self, message):
         """Команда /help"""
-        help_text = (
-            "🆘 <b>Справка по управлению ботом</b>\n\n"
-            "📋 <b>Команды управления мониторингом:</b>\n"
-            "• /start - главное меню панели управления\n"
-            "• /status - статус системы мониторинга\n"
-            "• /start_monitoring - запустить мониторинг новостей\n"
-            "• /stop - остановить мониторинг новостей\n\n"
-            "📋 <b>Команды управления каналами:</b>\n"
-            "• /channels - список отслеживаемых каналов\n"
-            "• /add_channel [ссылка] - добавить канал\n"
-            "• /stats - статистика за сегодня\n\n"
-            "📋 <b>Команды настройки:</b>\n"
-            "• /settings - настройки интерфейса\n\n"
-            "⌨️ <b>Кнопки снизу экрана:</b>\n"
-            "• 🚀 Запуск - запустить мониторинг\n"
-            "• 🛑 Стоп - остановить мониторинг\n"
-            "• 🔄 Рестарт - перезапуск системы\n"
-            "• 📊 Статус - состояние системы\n"
-            "• 🗂️ Управление каналами - просмотр и удаление каналов\n"
-            "• 📈 Статистика - статистика работы\n"
-            "• ➕ Добавить канал - помощь по добавлению\n"
-            "• ⚙️ Настройки - настройки интерфейса\n\n"
-            "<b>💡 Примеры добавления каналов:</b>\n"
-            "• <code>/add_channel https://t.me/news_channel</code>\n"
-            "• <code>https://t.me/news_channel</code> (просто ссылка)\n"
-            "• <code>@news_channel</code>\n\n"
-            "<b>🚀 Массовое добавление каналов:</b>\n"
-            "• <code>@channel1 @channel2 @channel3</code>\n"
-            "• <code>https://t.me/ch1 t.me/ch2 @ch3</code>\n"
-            "• Смешивайте любые форматы в одном сообщении\n\n"
-            "<b>📤 Быстрое добавление через forward:</b>\n"
-            "• Перешлите любой пост из канала боту\n"
-            "• Бот автоматически предложит добавить этот канал\n"
-            "• Регион определится автоматически по названию\n"
-            "• Самый быстрый способ добавления! ⚡\n\n"
-            "<b>🔧 Назначение команд:</b>\n"
-            "• <b>Запуск</b> - начинает мониторинг добавленных каналов\n"
-            "• <b>Стоп</b> - останавливает мониторинг (каналы остаются)\n"
-            "• <b>Настройки</b> - управление интерфейсом (удаление команд, редактирование сообщений)"
-        )
-        
-        keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
-        await self.edit_message_with_keyboard(help_text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
+        await self.basic_commands.help(message)
     
     async def cmd_status(self, message):
         """Команда /status - статус системы"""
-        try:
-            # Проверяем статус мониторинга
-            if self.monitor_bot and hasattr(self.monitor_bot, 'monitoring_active'):
-                is_running = self.monitor_bot.monitoring_active
-            else:
-                is_running = True  # Если команды вызываются, значит бот работает
-                
-            monitoring_status = "🟢 Работает" if is_running else "🔴 Остановлен"
-            monitoring_emoji = "📡" if is_running else "⏹️"
-            
-            # Получаем количество каналов
-            try:
-                channels = await self.get_channels_from_config()
-                channels_count = len(channels)
-            except:
-                channels_count = 0
-            
-            status_text = (
-                "📊 <b>Статус системы мониторинга</b>\n\n"
-                f"🔄 <b>Панель управления:</b> 🟢 Активна\n"
-                f"{monitoring_emoji} <b>Мониторинг новостей:</b> {monitoring_status}\n"
-                f"📺 <b>Каналов добавлено:</b> {channels_count}\n\n"
-            )
-            
-            if is_running:
-                status_text += (
-                    "💡 <b>Состояние:</b> Отслеживание активно\n\n"
-                )
-            else:
-                status_text += (
-                    "💡 <b>Состояние:</b> Для запуска нажмите 🚀 Запуск\n\n"
-                )
-            
-            vladivostok_tz = pytz.timezone('Asia/Vladivostok')
-            current_time = datetime.now(vladivostok_tz).strftime('%d.%m.%Y %H:%M:%S')
-            status_text += f"🕐 {current_time} (Владивосток)"
-            
-            keyboard = [
-                [
-                    {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"},
-                    {"text": "📈 Статистика", "callback_data": "stats"}
-                ],
-                [{"text": "🏠 Главное меню", "callback_data": "start"}]
-            ]
-            
-            # Определяем куда отправлять ответ
-            chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
-            to_group = self.is_message_from_group(chat_id) if chat_id else None
-            
-            await self.send_message_with_keyboard(status_text, keyboard, use_reply_keyboard=False, to_group=to_group)
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка команды status: {e}")
-            await self.send_command_response("❌ Ошибка получения статуса", message)
+        await self.basic_commands.status(message)
     
     async def cmd_start_monitoring(self, message):
         """Команда /start_monitoring - запустить мониторинг"""
@@ -1734,109 +1584,11 @@ class TelegramBot:
     
     async def cmd_restart(self, message):
         """Команда для рестарта бота"""
-        try:
-            keyboard = [["🏠 Главное меню"]]
-            
-            # Отправляем подтверждение рестарта
-            vladivostok_tz = pytz.timezone('Asia/Vladivostok')
-            current_time = datetime.now(vladivostok_tz).strftime('%d.%m.%Y %H:%M:%S')
-            
-            await self.send_message_with_keyboard(
-                "🔄 <b>Перезапуск системы...</b>\n\n"
-                "🔄 Останавливаем мониторинг...\n"
-                "💾 Сохраняем данные...\n"
-                "🚀 Запускаем новый процесс...\n\n"
-                f"🕐 {current_time} (Владивосток)\n\n"
-                "⏳ <i>Пожалуйста, подождите несколько секунд...</i>",
-                keyboard
-            )
-            
-            # Даем время отправить сообщение
-            await asyncio.sleep(2)
-            
-            # Перезапускаем процесс
-            logger.info("🔄 Выполняется рестарт системы...")
-            import os
-            import sys
-            os.execv(sys.executable, ['python'] + sys.argv)
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка рестарта: {e}")
-            await self.send_message_with_keyboard(
-                f"❌ <b>Ошибка рестарта</b>\n\n{e}",
-                [["🏠 Главное меню"]]
-            )
+        await self.basic_commands.restart(message)
     
     async def cmd_topic_id(self, message):
         """Команда для определения ID темы в группе"""
-        try:
-            # Получаем информацию о сообщении
-            chat = message.get("chat", {})
-            chat_type = chat.get("type")
-            chat_title = chat.get("title", "Неизвестная группа")
-            chat_id = chat.get("id")
-            thread_id = message.get("message_thread_id")
-            
-            if chat_type not in ["group", "supergroup"]:
-                await self.send_message(
-                    "❌ <b>Эта команда работает только в группах</b>\n\n"
-                    "Отправьте команду /topic_id в нужной теме группы"
-                )
-                return
-            
-            # Сохраняем данные темы для возможного добавления
-            self.pending_topic_data = {
-                'chat_title': chat_title,
-                'chat_id': chat_id,
-                'thread_id': thread_id
-            }
-            
-            if not thread_id:
-                # Общая лента без темы
-                response_text = (
-                    f"🎯 <b>ID ТЕМЫ ПОЛУЧЕН!</b>\n\n"
-                    f"📂 <b>Группа:</b> {chat_title}\n"
-                    f"🏠 <b>Chat ID:</b> <code>{chat_id}</code>\n"
-                    f"📋 <b>Тема:</b> Общая лента (главная)\n"
-                    f"🆔 <b>Topic ID:</b> <code>null</code>\n\n"
-                    f"📝 <b>Ручная настройка:</b>\n"
-                    f"<code>general: null</code>"
-                )
-                
-                keyboard = [
-                    [{"text": "🤖 Автоматически добавить в конфиг", "callback_data": "auto_add_topic_general"}],
-                    [{"text": "📋 Только показать информацию", "callback_data": "no_action"}]
-                ]
-                
-            else:
-                # Конкретная тема
-                response_text = (
-                    f"🎯 <b>ID ТЕМЫ ПОЛУЧЕН!</b>\n\n"
-                    f"📂 <b>Группа:</b> {chat_title}\n"
-                    f"🏠 <b>Chat ID:</b> <code>{chat_id}</code>\n"
-                    f"📋 <b>Тема:</b> Текущая тема\n"
-                    f"🆔 <b>Topic ID:</b> <code>{thread_id}</code>\n\n"
-                    f"📝 <b>Выберите регион для автоматического добавления:</b>"
-                )
-                
-                # Загружаем список регионов из конфига
-                regions = await self.load_regions_from_config()
-                keyboard = []
-                
-                for region in regions:
-                    region_name = region['name']
-                    region_key = region['key']
-                    keyboard.append([{"text": f"{region['emoji']} {region_name}", "callback_data": f"auto_add_topic_{region_key}"}])
-                
-                keyboard.append([{"text": "📋 Только показать информацию", "callback_data": "no_action"}])
-            
-            await self.send_message_with_keyboard(response_text, keyboard, use_reply_keyboard=False)
-                
-            logger.info(f"📂 Topic ID запрос: группа '{chat_title}' (chat_id: {chat_id}), thread_id = {thread_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Ошибка команды topic_id: {e}")
-            await self.send_message(f"❌ <b>Ошибка:</b> {e}")
+        await self.basic_commands.topic_id(message)
     
     async def auto_add_topic_to_config(self, region_key: str):
         """Автоматически добавить topic ID в конфиг"""
@@ -2401,156 +2153,12 @@ class TelegramBot:
             await self.send_message(f"❌ Ошибка: {e}")
 
     async def cmd_add_channel(self, message):
-        """Команда /add_channel - добавить канал"""
-        if not message:
-            await self.send_message("📝 Отправьте ссылку на канал в формате:\n<code>https://t.me/channel_name</code>")
-            return
-            
-        text = message.get("text", "")
-        parts = text.split(maxsplit=1)
-        
-        if len(parts) < 2:
-            await self.send_message(
-                "❌ <b>Неверный формат команды</b>\n\n"
-                "Используйте:\n"
-                "• <code>/add_channel https://t.me/news_channel</code>\n"
-                "• <code>/add_channel @news_channel</code>"
-            )
-            return
-        
-        channel_link = parts[1].strip()
-        await self.add_channel_handler(channel_link)
+        """Команда /add_channel - делегировано"""
+        await self.channel_commands.add_channel(message)
     
     async def cmd_force_subscribe(self, message):
-        """Команда /force_subscribe - принудительная подписка на все каналы"""
-        try:
-            await self.send_message(
-                "📡 <b>Принудительная подписка на каналы</b>\n\n"
-                "🔄 Запускаю проверку и подписку на все каналы из конфигурации...\n"
-                "⏳ Это может занять несколько минут..."
-            )
-            
-            # Проверяем что main_instance доступен
-            if not hasattr(self, 'main_instance') or not self.main_instance:
-                await self.send_message("❌ Главный экземпляр системы недоступен")
-                return
-            
-            # Проверяем что telegram_monitor доступен
-            if not hasattr(self.main_instance, 'telegram_monitor') or not self.main_instance.telegram_monitor:
-                await self.send_message("❌ Telegram мониторинг недоступен")
-                return
-            
-            # Очищаем кэш подписок для принудительной перепроверки
-            self.main_instance.clear_subscription_cache()
-            # Также очищаем кэш диалогов Telegram для точной проверки
-            if hasattr(self.main_instance.telegram_monitor, 'clear_cache'):
-                await self.main_instance.telegram_monitor.clear_cache()
-            logger.info("🗑️ Кэш подписок и диалогов очищен для принудительной подписки")
-            
-            # Загружаем список всех каналов из конфигурации
-            channels_data = await self.get_channels_from_config()
-            all_channels = channels_data.get('channels', [])
-            
-            if not all_channels:
-                await self.send_message("❌ Нет каналов для подписки в конфигурации")
-                return
-            
-            await self.send_message(f"📋 Найдено {len(all_channels)} каналов для проверки подписки")
-            
-            # Статистика подписки
-            success_count = 0
-            already_subscribed_count = 0
-            failed_count = 0
-            rate_limited_count = 0
-            
-            from telethon.tl.functions.channels import JoinChannelRequest
-            
-            for i, channel_config in enumerate(all_channels, 1):
-                try:
-                    username = channel_config.get('username', '')
-                    if not username:
-                        continue
-                    
-                    logger.info(f"📡 [{i}/{len(all_channels)}] Проверяем подписку на @{username}")
-                    
-                    # Получаем entity канала
-                    entity = await self.main_instance.telegram_monitor.get_channel_entity(username)
-                    if not entity:
-                        logger.error(f"❌ Не удалось получить entity для @{username}")
-                        failed_count += 1
-                        continue
-                    
-                    # Проверяем подписку
-                    already_joined = await self.main_instance.telegram_monitor.is_already_joined(entity)
-                    
-                    if already_joined:
-                        logger.info(f"✅ Уже подписан на @{username}")
-                        already_subscribed_count += 1
-                        # Добавляем в кэш
-                        self.main_instance.add_channel_to_cache(username)
-                    else:
-                        # Подписываемся
-                        try:
-                            await self.main_instance.telegram_monitor.client(JoinChannelRequest(entity))
-                            logger.info(f"✅ Подписался на @{username}")
-                            success_count += 1
-                            # Добавляем в кэш после успешной подписки
-                            self.main_instance.add_channel_to_cache(username)
-                            await asyncio.sleep(3)  # Пауза между подписками
-                        except Exception as sub_error:
-                            error_msg = str(sub_error).lower()
-                            if "wait" in error_msg and "seconds" in error_msg:
-                                logger.warning(f"⏳ Rate limit на @{username}")
-                                rate_limited_count += 1
-                            elif "already" in error_msg or "участник" in error_msg:
-                                logger.info(f"✅ Уже подписан на @{username}")
-                                already_subscribed_count += 1
-                                # Добавляем в кэш
-                                self.main_instance.add_channel_to_cache(username)
-                            else:
-                                logger.error(f"❌ Ошибка подписки на @{username}: {sub_error}")
-                                failed_count += 1
-                    
-                    # Отправляем промежуточный отчет каждые 10 каналов
-                    if i % 10 == 0:
-                        progress_text = (
-                            f"🔄 <b>Прогресс: {i}/{len(all_channels)}</b>\n\n"
-                            f"✅ Подписался: {success_count}\n"
-                            f"💾 Уже подписан: {already_subscribed_count}\n"
-                            f"⏳ Rate limit: {rate_limited_count}\n"
-                            f"❌ Ошибки: {failed_count}"
-                        )
-                        await self.send_message(progress_text)
-                
-                except Exception as e:
-                    logger.error(f"❌ Ошибка обработки канала @{username}: {e}")
-                    failed_count += 1
-            
-            # Итоговый отчет
-            final_report = (
-                f"📡 <b>Принудительная подписка завершена!</b>\n\n"
-                f"📊 <b>Результаты:</b>\n"
-                f"✅ Успешно подписался: <b>{success_count}</b>\n"
-                f"💾 Уже был подписан: <b>{already_subscribed_count}</b>\n"
-                f"⏳ Rate limit: <b>{rate_limited_count}</b>\n"
-                f"❌ Ошибки: <b>{failed_count}</b>\n\n"
-                f"📋 Всего проверено: <b>{len(all_channels)}</b> каналов\n"
-                f"🎉 Активных подписок: <b>{success_count + already_subscribed_count}</b>"
-            )
-            
-            if rate_limited_count > 0:
-                final_report += (
-                    f"\n\n💡 <b>Rate limit</b> - временное ограничение Telegram.\n"
-                    f"Повторите команду через несколько минут для повторной попытки."
-                )
-            
-            await self.send_message(final_report)
-            logger.info(f"📡 Принудительная подписка завершена: {success_count} новых + {already_subscribed_count} существующих = {success_count + already_subscribed_count} активных подписок")
-            
-        except Exception as e:
-            error_msg = f"❌ Ошибка принудительной подписки: {e}"
-            logger.error(error_msg)
-            await self.send_message(error_msg)
+        """Команда /force_subscribe - делегировано"""
+        await self.channel_commands.force_subscribe(message)
     
     async def cmd_list_channels(self, message, page: int = 0):
         """Команда /channels - список каналов с пагинацией"""
@@ -2619,44 +2227,7 @@ class TelegramBot:
             logger.error(f"❌ Ошибка команды channels: {e}")
             await self.send_message("❌ Ошибка получения списка каналов")
     
-    async def cmd_stats(self, message):
-        """Команда /stats - статистика"""
-        try:
-            if not self.monitor_bot or not self.monitor_bot.database:
-                await self.send_message("❌ База данных недоступна")
-                return
-            
-            stats = await self.monitor_bot.database.get_today_stats()
-            
-            stats_text = (
-                "📈 <b>Статистика за сегодня</b>\n\n"
-                f"📰 Всего сообщений: <b>{stats['total_messages']}</b>\n"
-                f"📤 Отобрано: <b>{stats['selected_messages']}</b>\n"
-                f"📊 Процент отбора: <b>{(stats['selected_messages'] / max(stats['total_messages'], 1) * 100):.1f}%</b>\n\n"
-                f"🕐 Последнее обновление: {datetime.now(pytz.timezone('Asia/Vladivostok')).strftime('%d.%m.%Y %H:%M:%S')}"
-            )
-            
-            keyboard = [
-                [
-                    {"text": "📊 Статус", "callback_data": "status"},
-                    {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}
-                ],
-                [
-                    {"text": "🗑️ Очистить статистику", "callback_data": "clear_stats"},
-                    {"text": "🏠 Главное меню", "callback_data": "start"}
-                ]
-            ]
-            
-            # Определяем куда отправлять ответ
-            chat_id = message.get("chat", {}).get("id") if message else self.admin_chat_id
-            to_group = self.is_message_from_group(chat_id) if chat_id else None
-            
-            await self.send_message_with_keyboard(stats_text, keyboard, use_reply_keyboard=False, to_group=to_group)
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка команды stats: {e}")
-            await self.send_command_response("❌ Ошибка получения статистики", message)
-    
+
     async def clear_stats_handler(self):
         """Обработчик очистки статистики"""
         try:
@@ -2693,31 +2264,7 @@ class TelegramBot:
             logger.error(f"❌ Ошибка очистки статистики: {e}")
             await self.send_message("❌ Ошибка очистки статистики")
     
-    async def cmd_settings(self, message):
-        """Команда /settings - настройки интерфейса"""
-        delete_status = "🟢 Включено" if self.delete_commands else "🔴 Выключено"
-        edit_status = "🟢 Включено" if self.edit_messages else "🔴 Выключено"
-        
-        settings_text = (
-            "⚙️ <b>Настройки интерфейса</b>\n\n"
-            f"🗑️ <b>Удаление команд:</b> {delete_status}\n"
-            f"📝 <b>Редактирование сообщений:</b> {edit_status}\n\n"
-            "🔧 <b>Описание:</b>\n"
-            "• <b>Удаление команд</b> - автоматически удалять ваши команды и нажатия кнопок\n"
-            "• <b>Редактирование сообщений</b> - обновлять существующие сообщения вместо создания новых\n\n"
-            "💡 <b>Рекомендация:</b> Включите удаление команд для чистоты чата"
-        )
-        
-        keyboard = [
-            [
-                {"text": f"🗑️ Удаление: {delete_status}", "callback_data": "toggle_delete"},
-                {"text": f"📝 Редактирование: {edit_status}", "callback_data": "toggle_edit"}
-            ],
-            [{"text": "🏠 Главное меню", "callback_data": "start"}]
-        ]
-        
-        await self.edit_message_with_keyboard(settings_text, keyboard, use_reply_keyboard=False, chat_id=self.current_callback_chat_id)
-    
+
     async def add_channel_handler(self, channel_link: str):
         """Обработчик добавления канала"""
         try:
