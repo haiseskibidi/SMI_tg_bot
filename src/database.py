@@ -653,6 +653,90 @@ class DatabaseManager:
             logger.error(f"❌ Ошибка подсчета активных каналов: {e}")
             return 0
 
+    async def get_top_news_for_period(
+        self, 
+        start_date, 
+        end_date, 
+        region: Optional[str] = None, 
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Получить топ новости за период по популярности"""
+        try:
+            # Базовый запрос
+            query = """
+                SELECT 
+                    id, channel_username, channel_name, channel_region,
+                    message_id, text, date, views, forwards, replies, reactions_count,
+                    url, created_at,
+                    (views + forwards * 2 + replies * 3 + reactions_count * 5) as popularity_score
+                FROM messages 
+                WHERE date >= ? AND date <= ?
+                    AND text IS NOT NULL AND text != ''
+            """
+            
+            params = [start_date, end_date]
+            
+            # Фильтр по региону если указан
+            if region:
+                query += " AND channel_region = ?"
+                params.append(region)
+            
+            # Сортировка по популярности и ограничение
+            query += " ORDER BY popularity_score DESC, date DESC LIMIT ?"
+            params.append(limit)
+            
+            async with aiosqlite.connect(self.db_path) as conn:
+                conn.row_factory = aiosqlite.Row
+                async with conn.execute(query, params) as cursor:
+                    rows = await cursor.fetchall()
+                    
+                    results = []
+                    for row in rows:
+                        results.append({
+                            'id': row['id'],
+                            'channel_username': row['channel_username'],
+                            'channel_name': row['channel_name'],
+                            'channel_region': row['channel_region'],
+                            'message_id': row['message_id'],
+                            'text': row['text'],
+                            'date': row['date'],
+                            'views': row['views'],
+                            'forwards': row['forwards'],
+                            'replies': row['replies'],
+                            'reactions_count': row['reactions_count'],
+                            'url': row['url'],
+                            'created_at': row['created_at'],
+                            'popularity_score': row['popularity_score']
+                        })
+                    
+                    logger.info(f"📊 Найдено {len(results)} топ новостей за период")
+                    return results
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения топ новостей: {e}")
+            return []
+
+    async def get_regions_with_news(self) -> List[str]:
+        """Получить список регионов, в которых есть новости"""
+        try:
+            query = """
+                SELECT DISTINCT channel_region 
+                FROM messages 
+                WHERE channel_region IS NOT NULL 
+                    AND channel_region != ''
+                    AND date >= datetime('now', '-30 days')
+                ORDER BY channel_region
+            """
+            
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.execute(query) as cursor:
+                    rows = await cursor.fetchall()
+                    return [row[0] for row in rows if row[0]]
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения регионов: {e}")
+            return []
+
     async def close(self):
         """Закрытие соединений с базой данных"""
         logger.info("👋 База данных закрыта")

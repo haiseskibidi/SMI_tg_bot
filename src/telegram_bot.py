@@ -9,7 +9,7 @@ import httpx
 import subprocess
 import os
 import sys
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from loguru import logger
 from datetime import datetime
 import json
@@ -74,6 +74,7 @@ class TelegramBot:
         self.register_command("restart", self.basic_commands.restart)
         self.register_command("kill_switch", self.basic_commands.kill_switch)  
         self.register_command("unlock", self.basic_commands.unlock)
+        self.register_command("digest", self.basic_commands.digest)
         self.register_command("topic_id", self.basic_commands.topic_id)
         self.register_command("add_channel", self.channel_commands.add_channel)
         self.register_command("manage_channels", self.management_commands.manage_channels)
@@ -102,6 +103,7 @@ class TelegramBot:
                 {"command": "start_monitoring", "description": "🚀 Запустить мониторинг"},
                 {"command": "stop_monitoring", "description": "🛑 Остановить мониторинг"},
                 {"command": "restart", "description": "🔄 Перезапустить систему"},
+                {"command": "digest", "description": "📰 Дайджест топ новостей"},
                 {"command": "kill_switch", "description": "🛑 Полная блокировка"},
                 {"command": "unlock", "description": "🔓 Разблокировать бота"},
                 {"command": "topic_id", "description": "📂 Узнать ID темы"},
@@ -756,6 +758,10 @@ class TelegramBot:
                 await self.confirm_kill_switch(callback_message)
             elif data == "force_subscribe":
                 await self.cmd_force_subscribe(callback_message)
+            elif data == "digest":
+                await self.basic_commands.digest(callback_message)
+            elif data.startswith("digest_"):
+                await self.handle_digest_callback(data, callback_message)
             elif data.startswith("region_bulk_"):
                 region = data.replace("region_bulk_", "")
                 await self.handle_bulk_region_selection(region)
@@ -2932,6 +2938,36 @@ class TelegramBot:
             logger.error(f"❌ Ошибка автокоммита: {e}")
             return False
 
+    async def handle_digest_callback(self, data: str, message: Optional[Dict[str, Any]]) -> None:
+        """Обработка callback'ов дайджеста"""
+        try:
+            # Парсим данные: digest_region_days
+            parts = data.split("_")
+            if len(parts) >= 3:
+                region = parts[1] if parts[1] != "all" else None
+                days = int(parts[2]) if parts[2].isdigit() else 7
+                
+                # Показываем процесс генерации
+                await self.send_message("📰 Генерируем дайджест, подождите...")
+                
+                # Генерируем дайджест
+                digest_text = await self.basic_commands.generate_digest_for_region(region, days)
+                
+                # Отправляем результат
+                keyboard = [
+                    [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
+                    [{"text": "🏠 Главное меню", "callback_data": "start"}]
+                ]
+                
+                await self.send_message_with_keyboard(digest_text, keyboard)
+                
+            else:
+                await self.send_message("❌ Некорректные параметры дайджеста")
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки дайджеста: {e}")
+            await self.send_message(f"❌ Ошибка генерации дайджеста: {e}")
+
 
 # Функция для создания бота из конфигурации
 async def create_bot_from_config(config: Dict, monitor_bot=None) -> Optional[TelegramBot]:
@@ -2961,3 +2997,5 @@ async def create_bot_from_config(config: Dict, monitor_bot=None) -> Optional[Tel
     except Exception as e:
         logger.error(f"❌ Ошибка создания бота: {e}")
         return None
+
+

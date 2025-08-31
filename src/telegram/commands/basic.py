@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 from datetime import datetime
 import pytz
 import asyncio
 from loguru import logger
 
+if TYPE_CHECKING:
+    from src.telegram_bot import TelegramBot
+
 
 class BasicCommands:
     def __init__(self, bot: "TelegramBot") -> None:
         self.bot = bot
+        self.digest_generator = None
 
     async def start(self, message: Optional[Dict[str, Any]]) -> None:
         chat_id = message.get("chat", {}).get("id") if message else self.bot.admin_chat_id
@@ -20,7 +24,7 @@ class BasicCommands:
             [{"text": "➕ Добавить канал", "callback_data": "add_channel"}, {"text": "📡 Принудительная подписка", "callback_data": "force_subscribe"}],
             [{"text": "🚀 Запуск", "callback_data": "start_monitoring"}, {"text": "🛑 Стоп", "callback_data": "stop_monitoring"}],
             [{"text": "🔄 Рестарт", "callback_data": "restart"}, {"text": "⚙️ Настройки", "callback_data": "settings"}],
-            [{"text": "🆘 Справка", "callback_data": "help"}],
+            [{"text": "📰 Дайджест", "callback_data": "digest"}, {"text": "🆘 Справка", "callback_data": "help"}],
         ]
 
         welcome_text = (
@@ -32,6 +36,7 @@ class BasicCommands:
             "🚀 /start_monitoring - запустить мониторинг\n"
             "🛑 /stop - остановить мониторинг\n"
             "🔄 /restart - перезапуск системы\n"
+            "📰 /digest - дайджест топ новостей\n"
             "🛑 /kill_switch - полная блокировка\n"
             "🔓 /unlock - разблокировать бота\n"
             "📂 /topic_id - узнать ID темы в группе\n"
@@ -66,6 +71,7 @@ class BasicCommands:
             "• 🗂️ Управление каналами - просмотр и удаление каналов\n"
             "• ➕ Добавить канал - помощь по добавлению\n"
             "• 📡 Принудительная подписка - подключить каналы\n"
+            "• 📰 Дайджест - топ новостей за период\n"
             "• ⚙️ Настройки - настройки интерфейса\n\n"
             "<b>💡 Примеры добавления каналов:</b>\n"
             "• <code>/add_channel https://t.me/news_channel</code>\n"
@@ -260,6 +266,94 @@ class BasicCommands:
                 )
         except Exception as e:
             await self.bot.send_message(f"❌ Ошибка разблокировки: {e}")
+
+    def _init_digest_generator(self):
+        """Инициализация генератора дайджестов"""
+        try:
+            if self.bot.monitor_bot and hasattr(self.bot.monitor_bot, 'database'):
+                from src.digest_generator import DigestGenerator
+                self.digest_generator = DigestGenerator(self.bot.monitor_bot.database)
+                logger.info("📰 Генератор дайджестов инициализирован")
+            else:
+                logger.warning("⚠️ Нет доступа к базе данных для дайджестов")
+        except Exception as e:
+            logger.error(f"❌ Ошибка инициализации генератора дайджестов: {e}")
+
+    async def digest(self, message: Optional[Dict[str, Any]]) -> None:
+        """Генерация дайджеста топ новостей"""
+        try:
+            if not self.digest_generator:
+                self._init_digest_generator()
+            
+            if not self.digest_generator:
+                await self.bot.send_message("❌ Генератор дайджестов недоступен")
+                return
+
+            # Разбираем параметры команды если есть
+            command_text = message.get("text", "") if message else ""
+            params = command_text.split()[1:] if command_text else []
+            
+            days = 7  # по умолчанию неделя
+            custom_start = None
+            custom_end = None
+            
+            # Парсим параметры
+            if len(params) == 1:
+                try:
+                    days = int(params[0])
+                except ValueError:
+                    pass
+            elif len(params) == 2:
+                try:
+                    custom_start = params[0]
+                    custom_end = params[1]
+                except ValueError:
+                    pass
+
+            # Показываем меню выбора региона
+            keyboard = [
+                [{"text": "🌍 Все регионы", "callback_data": f"digest_all_{days}"}],
+                [{"text": "🔥 Камчатка", "callback_data": f"digest_kamchatka_{days}"}],
+                [{"text": "🌊 Сахалин", "callback_data": f"digest_sakhalin_{days}"}],
+                [{"text": "🏔️ Якутск", "callback_data": f"digest_yakutsk_{days}"}],
+                [{"text": "🏙️ Владивосток", "callback_data": f"digest_vladivostok_{days}"}],
+                [{"text": "🏠 Главное меню", "callback_data": "start"}],
+            ]
+
+            region_text = "📰 <b>Выберите регион для дайджеста:</b>\n\n"
+            region_text += f"📅 Период: {days} дней\n\n"
+            region_text += "💡 <b>Примеры команд:</b>\n"
+            region_text += "• <code>/digest</code> - неделя, все регионы\n"
+            region_text += "• <code>/digest 14</code> - 14 дней\n"
+            region_text += "• <code>/digest 2025-01-01 2025-01-07</code> - свой период"
+
+            await self.bot.send_message_with_keyboard(region_text, keyboard)
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка команды digest: {e}")
+            await self.bot.send_message(f"❌ Ошибка генерации дайджеста: {e}")
+
+    async def generate_digest_for_region(self, region: Optional[str], days: int = 7) -> str:
+        """Генерация дайджеста для конкретного региона"""
+        try:
+            if not self.digest_generator:
+                self._init_digest_generator()
+            
+            if not self.digest_generator:
+                return "❌ Генератор дайджестов недоступен"
+
+            # Генерируем дайджест
+            digest_text = await self.digest_generator.generate_weekly_digest(
+                region=region,
+                days=days,
+                limit=10
+            )
+            
+            return digest_text
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка генерации дайджеста для региона {region}: {e}")
+            return f"❌ Не удалось сгенерировать дайджест: {e}"
 
     async def topic_id(self, message: Optional[Dict[str, Any]]) -> None:
         chat = message.get("chat", {}) if message else {}
