@@ -46,81 +46,24 @@ class NewsMonitorWithBot:
         self.monitoring_active = True
         logger.info("▶️ Мониторинг возобновлен")
 
-    def safe_html_truncate(self, html_text: str, max_length: int) -> str:
-        if len(html_text) <= max_length:
-            return html_text
-        
-        truncated = html_text[:max_length]
-        last_space = truncated.rfind(' ')
-        if last_space > max_length * 0.8:
-            truncated = truncated[:last_space]
-        
-        open_tags = []
-        tag_pattern = r'<(/?)([^>]+)>'
-        
-        for match in re.finditer(tag_pattern, truncated):
-            is_closing = bool(match.group(1))
-            tag_name = match.group(2).split()[0].lower()
-            
-            if tag_name in ['br', 'hr', 'img']:
-                continue
-                
-            if is_closing:
-                if open_tags and open_tags[-1] == tag_name:
-                    open_tags.pop()
-            else:
-                open_tags.append(tag_name)
-        
-        for tag in reversed(open_tags):
-            truncated += f'</{tag}>'
-        
-        return truncated
 
-    def convert_markdown_to_html(self, text: str) -> str:
+
+    def clean_text_formatting(self, text: str) -> str:
+        """Простая очистка текста от markdown символов"""
         if not text:
             return ""
         
-        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-        text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', text)
-        text = re.sub(r'__(.*?)__', r'<u>\1</u>', text)
-        text = re.sub(r'~~(.*?)~~', r'<s>\1</s>', text)
-        text = re.sub(r'`(.*?)`', r'<code>\1</code>', text)
-        text = re.sub(r'```(.*?)```', r'<pre>\1</pre>', text, flags=re.DOTALL)
-        
-        url_pattern = r'(?<!<[^>]*)(https?://[^\s<>"\']+)'
-        text = re.sub(url_pattern, r'<a href="\1">\1</a>', text)
+        # Убираем markdown символы, оставляем только текст
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # **text** -> text
+        text = re.sub(r'\*(.*?)\*', r'\1', text)      # *text* -> text  
+        text = re.sub(r'__(.*?)__', r'\1', text)      # __text__ -> text
+        text = re.sub(r'~~(.*?)~~', r'\1', text)      # ~~text~~ -> text
+        text = re.sub(r'`(.*?)`', r'\1', text)        # `text` -> text
+        text = re.sub(r'```(.*?)```', r'\1', text, flags=re.DOTALL)  # ```text``` -> text
         
         return text
 
-    def validate_and_fix_html(self, html_text: str) -> str:
-        if not html_text:
-            return ""
-        
-        html_text = re.sub(r'<(/?)(\w+)[^>]*?/?>', r'<\1\2>', html_text)
-        
-        allowed_tags = ['b', 'i', 'u', 's', 'code', 'pre', 'a', 'br']
-        tag_pattern = r'<(/?)(\w+)([^>]*)>'
-        
-        def replace_tag(match):
-            is_closing = match.group(1)
-            tag_name = match.group(2).lower()
-            attributes = match.group(3)
-            
-            if tag_name not in allowed_tags:
-                return ''
-            
-            if tag_name == 'a' and not is_closing and 'href=' in attributes:
-                return f'<{is_closing}a{attributes}>'
-            elif tag_name == 'a' and is_closing:
-                return '</a>'
-            else:
-                return f'<{is_closing}{tag_name}>'
-        
-        html_text = re.sub(tag_pattern, replace_tag, html_text)
-        html_text = re.sub(r'&(?![a-zA-Z]+;)', '&amp;', html_text)
-        html_text = re.sub(r'<(?![/a-zA-Z])', '&lt;', html_text)
-        
-        return html_text
+
 
     def check_alert_keywords(self, text: str) -> tuple:
         if not text or not self.config_loader.get_alert_keywords():
@@ -142,7 +85,7 @@ class NewsMonitorWithBot:
 
     def format_alert_message(self, original_text: str, channel_username: str, emoji: str, category: str, matched_words: list) -> str:
         try:
-            alert_header = f"{emoji} <b>АЛЕРТ: {category.upper()}</b>\n"
+            alert_header = f"{emoji} АЛЕРТ: {category.upper()}\n"
             alert_header += f"📺 Канал: @{channel_username}\n"
             alert_header += f"🔍 Ключевые слова: {', '.join(matched_words)}\n"
             alert_header += "─" * 30 + "\n\n"
@@ -345,7 +288,7 @@ class NewsMonitorWithBot:
             channel_username = news.get('channel_username', '')
             date = news.get('date')
             
-            text = self.convert_markdown_to_html(text)
+            text = self.clean_text_formatting(text)
             
             date_str = ""
             if date:
@@ -358,7 +301,7 @@ class NewsMonitorWithBot:
                     pass
             
             if is_media:
-                message = f"<b>@{channel_username}</b>"
+                message = f"@{channel_username}"
                 if text:
                     message += f"\n\n{text}"
                 if date_str:
@@ -382,7 +325,7 @@ class NewsMonitorWithBot:
                 if url:
                     message += f"\n\n🔗 {url}"
             else:
-                message = f"<b>@{channel_username}</b>"
+                message = f"@{channel_username}"
                 if text:
                     message += f"\n\n{text}"
                 if date_str:
@@ -410,7 +353,7 @@ class NewsMonitorWithBot:
                                 media_files, caption, target, thread_id
                             )
                     else:
-                        success = await self.telegram_bot.send_message_to_channel(message, target, "HTML", thread_id)
+                        success = await self.telegram_bot.send_message_to_channel(message, target, None, thread_id)
                     
                     if success:
                         logger.info(f"✅ Сообщение отправлено в регион '{region}'")
@@ -641,12 +584,11 @@ class NewsMonitorWithBot:
                 else:
                     date_str = ""
                 
-                caption = f"<b>@{channel_username}</b>"
+                caption = f"@{channel_username}"
                 if text:
-                    clean_text = self.convert_markdown_to_html(text.strip())
+                    clean_text = self.clean_text_formatting(text.strip())
                     if len(clean_text) > 800:
-                        clean_text = self.safe_html_truncate(clean_text, 800)
-                    clean_text = self.validate_and_fix_html(clean_text)
+                        clean_text = clean_text[:800] + "..."
                     caption += f"\n\n{clean_text}"
                     logger.info(f"📝 Добавлен текст в caption: {clean_text[:50]}...")
                 else:
@@ -711,10 +653,10 @@ class NewsMonitorWithBot:
                 except:
                     pass
             
-            media_notification = f"<b>@{channel_username}</b>"
+            media_notification = f"@{channel_username}"
             
             if text:
-                clean_text = self.convert_markdown_to_html(text)
+                clean_text = self.clean_text_formatting(text)
                 media_notification += f"\n\n{clean_text}"
             
             if date_str:
@@ -755,7 +697,7 @@ class NewsMonitorWithBot:
             channel_username = news.get('channel_username', '')
             date = news.get('date')
             
-            clean_text = self.convert_markdown_to_html(text)
+            clean_text = self.clean_text_formatting(text)
             
             date_str = ""
             if date:
@@ -767,7 +709,7 @@ class NewsMonitorWithBot:
                 except:
                     pass
             
-            message = f"<b>@{channel_username}</b>"
+            message = f"@{channel_username}"
             if clean_text:
                 message += f"\n\n{clean_text}"
             if date_str:
