@@ -2983,15 +2983,15 @@ class TelegramBot:
             
             # Обрабатываем результат с пагинацией
             if isinstance(digest_result, dict):
-                # Новый формат с пагинацией
-                await self.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'])
+                # Новый формат с пагинацией - используем inline кнопки
+                await self.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'], use_reply_keyboard=False)
             else:
-                # Старый формат (строка) - добавляем базовые кнопки
+                # Старый формат (строка) - добавляем базовые кнопки как inline
                 keyboard = [
                     [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
                     [{"text": "🏠 Главное меню", "callback_data": "start"}]
                 ]
-                await self.send_message_with_keyboard(digest_result, keyboard)
+                await self.send_message_with_keyboard(digest_result, keyboard, use_reply_keyboard=False)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка обработки дайджеста: {e}")
@@ -3016,7 +3016,7 @@ class TelegramBot:
                 page_result = await self.basic_commands.digest_generator.get_digest_page(channel_username, page)
                 
                 if isinstance(page_result, dict):
-                    await self.send_message_with_keyboard(page_result['text'], page_result['keyboard'])
+                    await self.send_message_with_keyboard(page_result['text'], page_result['keyboard'], use_reply_keyboard=False)
                 else:
                     await self.send_message("❌ Ошибка получения страницы дайджеста")
             else:

@@ -364,7 +364,7 @@ class BasicCommands:
             self.bot.waiting_for_digest_channel = True
             self.bot.digest_days = days
             
-            await self.bot.send_message_with_keyboard(channel_text, keyboard)
+            await self.bot.send_message_with_keyboard(channel_text, keyboard, use_reply_keyboard=False)
 
         except Exception as e:
             logger.error(f"❌ Ошибка команды digest: {e}")
@@ -424,15 +424,15 @@ class BasicCommands:
             
             # Обрабатываем результат с пагинацией
             if isinstance(digest_result, dict):
-                # Новый формат с пагинацией
-                await self.bot.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'])
+                # Новый формат с пагинацией - используем inline кнопки
+                await self.bot.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'], use_reply_keyboard=False)
             else:
-                # Старый формат (строка) - добавляем базовые кнопки
+                # Старый формат (строка) - добавляем базовые кнопки как inline
                 keyboard = [
                     [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
                     [{"text": "🏠 Главное меню", "callback_data": "start"}]
                 ]
-                await self.bot.send_message_with_keyboard(digest_result, keyboard)
+                await self.bot.send_message_with_keyboard(digest_result, keyboard, use_reply_keyboard=False)
             return True
             
         except Exception as e:
