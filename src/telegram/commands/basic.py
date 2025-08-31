@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 from datetime import datetime
 import pytz
+import asyncio
+from loguru import logger
 
 
 class BasicCommands:
@@ -15,10 +17,10 @@ class BasicCommands:
 
         keyboard = [
             [{"text": "📊 Статус", "callback_data": "status"}, {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
-            [{"text": "📈 Статистика", "callback_data": "stats"}, {"text": "➕ Добавить канал", "callback_data": "add_channel"}],
+            [{"text": "➕ Добавить канал", "callback_data": "add_channel"}, {"text": "📡 Принудительная подписка", "callback_data": "force_subscribe"}],
             [{"text": "🚀 Запуск", "callback_data": "start_monitoring"}, {"text": "🛑 Стоп", "callback_data": "stop_monitoring"}],
             [{"text": "🔄 Рестарт", "callback_data": "restart"}, {"text": "⚙️ Настройки", "callback_data": "settings"}],
-            [{"text": "📡 Принудительная подписка", "callback_data": "force_subscribe"}, {"text": "🆘 Справка", "callback_data": "help"}],
+            [{"text": "🆘 Справка", "callback_data": "help"}],
         ]
 
         welcome_text = (
@@ -27,10 +29,11 @@ class BasicCommands:
             "📊 /status - статус системы\n"
             "🗂️ /manage_channels - управление каналами\n"
             "➕ /add_channel - добавить канал\n"
-            "📈 /stats - статистика\n"
             "🚀 /start_monitoring - запустить мониторинг\n"
             "🛑 /stop - остановить мониторинг\n"
             "🔄 /restart - перезапуск системы\n"
+            "🛑 /kill_switch - полная блокировка\n"
+            "🔓 /unlock - разблокировать бота\n"
             "📂 /topic_id - узнать ID темы в группе\n"
             "📡 /force_subscribe - принудительная подписка на каналы\n"
             "⚙️ /settings - настройки интерфейса\n\n"
@@ -61,8 +64,8 @@ class BasicCommands:
             "• 🔄 Рестарт - перезапуск системы\n"
             "• 📊 Статус - состояние системы\n"
             "• 🗂️ Управление каналами - просмотр и удаление каналов\n"
-            "• 📈 Статистика - статистика работы\n"
             "• ➕ Добавить канал - помощь по добавлению\n"
+            "• 📡 Принудительная подписка - подключить каналы\n"
             "• ⚙️ Настройки - настройки интерфейса\n\n"
             "<b>💡 Примеры добавления каналов:</b>\n"
             "• <code>/add_channel https://t.me/news_channel</code>\n"
@@ -101,12 +104,33 @@ class BasicCommands:
         except Exception:
             channels_count = 0
 
+        active_channels_count = 0
+        latest_message_info = {
+            'channel_name': 'Нет данных',
+            'text_preview': 'Сообщений пока нет'
+        }
+
+        if self.bot.monitor_bot and hasattr(self.bot.monitor_bot, 'database'):
+            try:
+                active_channels_count = await self.bot.monitor_bot.database.get_active_channels_count()
+                latest_message_info = await self.bot.monitor_bot.database.get_latest_message_info()
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось получить расширенную статистику: {e}")
+
         status_text = (
             "📊 <b>Статус системы мониторинга</b>\n\n"
             f"🔄 <b>Панель управления:</b> 🟢 Активна\n"
             f"{monitoring_emoji} <b>Мониторинг новостей:</b> {monitoring_status}\n"
-            f"📺 <b>Каналов добавлено:</b> {channels_count}\n\n"
+            f"📺 <b>Каналов добавлено:</b> {channels_count}\n"
+            f"📡 <b>Активно за 24ч:</b> {active_channels_count}\n\n"
         )
+
+        if latest_message_info['channel_name'] != 'Нет данных':
+            status_text += (
+                f"📰 <b>Последнее сообщение:</b>\n"
+                f"📣 Канал: {latest_message_info['channel_name']}\n"
+                f"💬 Текст: {latest_message_info['text_preview']}\n\n"
+            )
 
         if is_running:
             status_text += "💡 <b>Состояние:</b> Отслеживание активно\n\n"
@@ -118,10 +142,7 @@ class BasicCommands:
         status_text += f"🕐 {current_time} (Владивосток)"
 
         keyboard = [
-            [
-                {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"},
-                {"text": "📈 Статистика", "callback_data": "stats"},
-            ],
+            [{"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
             [{"text": "🏠 Главное меню", "callback_data": "start"}],
         ]
 
@@ -191,6 +212,54 @@ class BasicCommands:
         import os
         import sys
         os.execv(sys.executable, ["python"] + sys.argv)
+
+    async def kill_switch(self, message: Optional[Dict[str, Any]]) -> None:
+        """Создать файл полной блокировки бота"""
+        try:
+            keyboard = [
+                ["✅ ДА, ЗАБЛОКИРОВАТЬ", "❌ Отмена"],
+                ["🏠 Главное меню"]
+            ]
+            await self.bot.send_message_with_keyboard(
+                "🛑 <b>KILL SWITCH - Полная блокировка</b>\n\n"
+                "⚠️ <b>ВНИМАНИЕ!</b> Эта команда:\n"
+                "• Остановит бота НАВСЕГДА\n"
+                "• Заблокирует любые автоперезапуски\n"
+                "• Потребует ручной разблокировки через /unlock\n\n"
+                "🤔 <b>Вы действительно хотите заблокировать бота?</b>",
+                keyboard,
+            )
+        except Exception as e:
+            await self.bot.send_message(f"❌ Ошибка Kill Switch: {e}")
+
+    async def unlock(self, message: Optional[Dict[str, Any]]) -> None:
+        """Разблокировать бота (удалить файл STOP_BOT)"""
+        try:
+            import os
+            stop_file = "STOP_BOT"
+            
+            if os.path.exists(stop_file):
+                os.remove(stop_file)
+                keyboard = [["🏠 Главное меню"]]
+                vladivostok_tz = pytz.timezone("Asia/Vladivосток")
+                current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
+                await self.bot.send_message_with_keyboard(
+                    "🔓 <b>БОТ РАЗБЛОКИРОВАН!</b>\n\n"
+                    "✅ Файл блокировки удален\n"
+                    "✅ Бот готов к запуску\n\n"
+                    f"🕐 {current_time} (Владивосток)\n\n"
+                    "💡 <i>Systemd может автоматически перезапустить бота</i>",
+                    keyboard,
+                )
+            else:
+                keyboard = [["🏠 Главное меню"]]
+                await self.bot.send_message_with_keyboard(
+                    "ℹ️ <b>Бот не заблокирован</b>\n\n"
+                    "Файл блокировки STOP_BOT отсутствует",
+                    keyboard,
+                )
+        except Exception as e:
+            await self.bot.send_message(f"❌ Ошибка разблокировки: {e}")
 
     async def topic_id(self, message: Optional[Dict[str, Any]]) -> None:
         chat = message.get("chat", {}) if message else {}

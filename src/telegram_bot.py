@@ -72,6 +72,8 @@ class TelegramBot:
         self.register_command("start_monitoring", self.basic_commands.start_monitoring)
         self.register_command("stop_monitoring", self.basic_commands.stop_monitoring)
         self.register_command("restart", self.basic_commands.restart)
+        self.register_command("kill_switch", self.basic_commands.kill_switch)  
+        self.register_command("unlock", self.basic_commands.unlock)
         self.register_command("topic_id", self.basic_commands.topic_id)
         self.register_command("add_channel", self.channel_commands.add_channel)
         self.register_command("manage_channels", self.management_commands.manage_channels)
@@ -96,10 +98,12 @@ class TelegramBot:
                 {"command": "status", "description": "📊 Статус системы"},
                 {"command": "manage_channels", "description": "🗂️ Управление каналами"},
                 {"command": "add_channel", "description": "➕ Добавить канал"},
-                {"command": "stats", "description": "📈 Статистика"},
+
                 {"command": "start_monitoring", "description": "🚀 Запустить мониторинг"},
                 {"command": "stop_monitoring", "description": "🛑 Остановить мониторинг"},
                 {"command": "restart", "description": "🔄 Перезапустить систему"},
+                {"command": "kill_switch", "description": "🛑 Полная блокировка"},
+                {"command": "unlock", "description": "🔓 Разблокировать бота"},
                 {"command": "topic_id", "description": "📂 Узнать ID темы"},
                 {"command": "force_subscribe", "description": "📡 Принудительная подписка"},
                 {"command": "settings", "description": "⚙️ Настройки интерфейса"},
@@ -712,8 +716,7 @@ class TelegramBot:
             elif data.startswith("channels_page_"):
                 page = int(data.replace("channels_page_", ""))
                 await self.show_channels_page(page)
-            elif data == "stats":
-                await self.management_commands.stats(callback_message)
+
             elif data == "add_channel":
                 logger.info("🔧 Обрабатываем callback 'add_channel'")
                 add_text = (
@@ -749,6 +752,8 @@ class TelegramBot:
                 await self.cmd_stop_monitoring(callback_message)
             elif data == "restart":
                 await self.cmd_restart(callback_message)
+            elif data == "ДА, ЗАБЛОКИРОВАТЬ":
+                await self.confirm_kill_switch(callback_message)
             elif data == "force_subscribe":
                 await self.cmd_force_subscribe(callback_message)
             elif data.startswith("region_bulk_"):
@@ -816,6 +821,44 @@ class TelegramBot:
         finally:
             # Очищаем callback chat_id после обработки
             self.current_callback_chat_id = None
+
+    async def confirm_kill_switch(self, message):
+        """Подтверждение и выполнение kill switch"""
+        try:
+            import os
+            import sys
+            
+            # Создаем файл блокировки
+            with open("STOP_BOT", "w") as f:
+                f.write(f"Kill Switch activated at {datetime.now()}\n")
+                f.write("Bot permanently blocked from starting\n")
+            
+            keyboard = [["🏠 Главное меню"]]
+            vladivostok_tz = pytz.timezone('Asia/Vladivосток')  
+            current_time = datetime.now(vladivostok_tz).strftime('%d.%m.%Y %H:%M:%S')
+            
+            await self.send_message_with_keyboard(
+                "🛑 <b>KILL SWITCH АКТИВИРОВАН!</b>\n\n"
+                "🔒 Файл блокировки создан\n"
+                "🚫 Бот заблокирован от запуска\n\n"
+                f"🕐 {current_time} (Владивосток)\n\n"
+                "💡 Для разблокировки: /unlock\n"
+                "⏳ <i>Бот завершается через 3 секунды...</i>",
+                keyboard, use_reply_keyboard=False
+            )
+            
+            await asyncio.sleep(3)
+            logger.critical("🛑 KILL SWITCH: Бот заблокирован пользователем!")
+            
+            # Корректно завершаем все процессы
+            if self.monitor_bot:
+                self.monitor_bot.running = False
+                
+            sys.exit(0)  # Корректное завершение
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка Kill Switch: {e}")
+            await self.send_message(f"❌ Ошибка активации Kill Switch: {e}")
     
     async def send_message_to_channel(self, text: str, channel_target: str, parse_mode: str = "HTML", thread_id: int = None) -> bool:
         """Отправить сообщение в канал или группу (с поддержкой тем)"""
@@ -2251,12 +2294,7 @@ class TelegramBot:
                     "Попробуйте позже"
                 )
             
-            keyboard = [
-                [
-                    {"text": "📈 Статистика", "callback_data": "stats"},
-                    {"text": "🏠 Главное меню", "callback_data": "start"}
-                ]
-            ]
+            keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
             
             await self.edit_message_with_keyboard(clear_text, keyboard, use_reply_keyboard=False)
             

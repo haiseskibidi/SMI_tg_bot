@@ -583,6 +583,76 @@ class DatabaseManager:
             logger.error(f"❌ Ошибка получения неотправленных новостей: {e}")
             return []
 
+    async def get_latest_message_info(self) -> Dict[str, Any]:
+        """Получить информацию о последнем сообщении"""
+        try:
+            query = """
+                SELECT 
+                    channel_username,
+                    channel_name,
+                    text,
+                    date,
+                    created_at
+                FROM messages 
+                WHERE text IS NOT NULL AND text != ''
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """
+            
+            async with aiosqlite.connect(self.db_path) as conn:
+                conn.row_factory = aiosqlite.Row
+                async with conn.execute(query) as cursor:
+                    row = await cursor.fetchone()
+                    
+                    if row:
+                        text = row['text'] or ''
+                        words = text.split()[:3]
+                        preview = ' '.join(words) + ('...' if len(words) == 3 and len(text.split()) > 3 else '')
+                        
+                        return {
+                            'channel_username': row['channel_username'],
+                            'channel_name': row['channel_name'] or row['channel_username'],
+                            'text_preview': preview,
+                            'date': row['date'],
+                            'created_at': row['created_at']
+                        }
+                    else:
+                        return {
+                            'channel_username': None,
+                            'channel_name': 'Нет данных',
+                            'text_preview': 'Сообщений пока нет',
+                            'date': None,
+                            'created_at': None
+                        }
+                        
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения последнего сообщения: {e}")
+            return {
+                'channel_username': None,
+                'channel_name': 'Ошибка БД',
+                'text_preview': 'Не удалось получить данные',
+                'date': None,
+                'created_at': None
+            }
+
+    async def get_active_channels_count(self) -> int:
+        """Получить количество активных каналов за последние 24 часа"""
+        try:
+            query = """
+                SELECT COUNT(DISTINCT channel_username) as active_count
+                FROM messages 
+                WHERE date >= datetime('now', '-24 hours')
+            """
+            
+            async with aiosqlite.connect(self.db_path) as conn:
+                async with conn.execute(query) as cursor:
+                    row = await cursor.fetchone()
+                    return row[0] if row and row[0] else 0
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка подсчета активных каналов: {e}")
+            return 0
+
     async def close(self):
         """Закрытие соединений с базой данных"""
         logger.info("👋 База данных закрыта")
