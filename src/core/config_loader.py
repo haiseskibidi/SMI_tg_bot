@@ -41,7 +41,12 @@ class ConfigLoader:
         bot_group_chat_id = os.getenv('BOT_GROUP_CHAT_ID')
         api_id = os.getenv('TELEGRAM_API_ID')
         api_hash = os.getenv('TELEGRAM_API_HASH')
-        target_group = os.getenv('TARGET_GROUP_ID')
+        
+        # Поддерживаем разные имена переменных для target_group
+        target_group = (os.getenv('TARGET_GROUP_ID') or 
+                       os.getenv('YOUR_TARGET_GROUP_FROM_ENV') or
+                       os.getenv('BOT_TARGET_GROUP'))
+        
         bot_allowed_users = os.getenv('BOT_ALLOWED_USERS')
         
         if bot_token:
@@ -56,7 +61,9 @@ class ConfigLoader:
         if api_hash:
             self.config.setdefault('telegram', {})['api_hash'] = api_hash
         if target_group:
-            self.config.setdefault('telegram', {})['target_group'] = int(target_group)
+            # Исправляем: сохраняем в правильное место - output.target_group
+            self.config.setdefault('output', {})['target_group'] = int(target_group)
+            logger.info(f"🎯 Настроена целевая группа: {target_group}")
         if bot_allowed_users:
             self.config.setdefault('bot', {})['allowed_users'] = [int(x.strip()) for x in bot_allowed_users.split(',')]
 
