@@ -85,6 +85,10 @@ regions:
       username: live_41
     - title: Канал @newskaminform
       username: newskaminform
+    - title: Канал @ukmokrug
+      username: ukmokrug
+    - title: Канал @bondarenko_ukmo
+      username: bondarenko_ukmo
     name: 🌋 Камчатка
   sakhalin:
     channels:
@@ -146,6 +150,14 @@ regions:
       username: tugarevAV
     - title: Канал @sakhalinwatch
       username: sakhalinwatch
+    - title: Канал @moy_nevelsk
+      username: moy_nevelsk
+    - title: Канал @Ist_konst_mayor
+      username: Ist_konst_mayor
+    - title: Канал @onf_65
+      username: onf_65
+    - title: Канал @minsotc65
+      username: minsotc65
     name: 🏝️ Сахалин
   yakutsk:
     channels:
