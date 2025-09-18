@@ -1,0 +1,203 @@
+version: '3.8'
+
+services:
+  # БОТ ОТДЕЛА САХАЛИН
+  bot_sakhalin:
+    container_name: smi_bot_sakhalin
+    build: .
+    restart: always
+    volumes:
+      - ./configs/sakhalin:/app/config
+      - ./data/sakhalin:/app/data
+      - ./logs/sakhalin:/app/logs
+    environment:
+      - DEPARTMENT=sakhalin
+      - BOT_TOKEN=${SAKHALIN_BOT_TOKEN}
+      - API_ID=${SAKHALIN_API_ID}
+      - API_HASH=${SAKHALIN_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # БОТ ОТДЕЛА КАМЧАТКА
+  bot_kamchatka:
+    container_name: smi_bot_kamchatka
+    build: .
+    restart: always
+    volumes:
+      - ./configs/kamchatka:/app/config
+      - ./data/kamchatka:/app/data
+      - ./logs/kamchatka:/app/logs
+    environment:
+      - DEPARTMENT=kamchatka
+      - BOT_TOKEN=${KAMCHATKA_BOT_TOKEN}
+      - API_ID=${KAMCHATKA_API_ID}
+      - API_HASH=${KAMCHATKA_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # БОТ ОТДЕЛА ПРИМОРЬЕ
+  bot_primorye:
+    container_name: smi_bot_primorye
+    build: .
+    restart: always
+    volumes:
+      - ./configs/primorye:/app/config
+      - ./data/primorye:/app/data
+      - ./logs/primorye:/app/logs
+    environment:
+      - DEPARTMENT=primorye
+      - BOT_TOKEN=${PRIMORYE_BOT_TOKEN}
+      - API_ID=${PRIMORYE_API_ID}
+      - API_HASH=${PRIMORYE_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # БОТ ОТДЕЛА ХАБАРОВСК
+  bot_khabarovsk:
+    container_name: smi_bot_khabarovsk
+    build: .
+    restart: always
+    volumes:
+      - ./configs/khabarovsk:/app/config
+      - ./data/khabarovsk:/app/data
+      - ./logs/khabarovsk:/app/logs
+    environment:
+      - DEPARTMENT=khabarovsk
+      - BOT_TOKEN=${KHABAROVSK_BOT_TOKEN}
+      - API_ID=${KHABAROVSK_API_ID}
+      - API_HASH=${KHABAROVSK_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # БОТ ОТДЕЛА МАГАДАН
+  bot_magadan:
+    container_name: smi_bot_magadan
+    build: .
+    restart: always
+    volumes:
+      - ./configs/magadan:/app/config
+      - ./data/magadan:/app/data
+      - ./logs/magadan:/app/logs
+    environment:
+      - DEPARTMENT=magadan
+      - BOT_TOKEN=${MAGADAN_BOT_TOKEN}
+      - API_ID=${MAGADAN_API_ID}
+      - API_HASH=${MAGADAN_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # БОТ ОТДЕЛА ЧУКОТКА
+  bot_chukotka:
+    container_name: smi_bot_chukotka
+    build: .
+    restart: always
+    volumes:
+      - ./configs/chukotka:/app/config
+      - ./data/chukotka:/app/data
+      - ./logs/chukotka:/app/logs
+    environment:
+      - DEPARTMENT=chukotka
+      - BOT_TOKEN=${CHUKOTKA_BOT_TOKEN}
+      - API_ID=${CHUKOTKA_API_ID}
+      - API_HASH=${CHUKOTKA_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # БОТ ОТДЕЛА ЯКУТИЯ
+  bot_yakutia:
+    container_name: smi_bot_yakutia
+    build: .
+    restart: always
+    volumes:
+      - ./configs/yakutia:/app/config
+      - ./data/yakutia:/app/data
+      - ./logs/yakutia:/app/logs
+    environment:
+      - DEPARTMENT=yakutia
+      - BOT_TOKEN=${YAKUTIA_BOT_TOKEN}
+      - API_ID=${YAKUTIA_API_ID}
+      - API_HASH=${YAKUTIA_API_HASH}
+    networks:
+      - smi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+
+  # ЦЕНТРАЛИЗОВАННЫЙ МОНИТОРИНГ
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: smi_prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - smi_network
+
+  # ВИЗУАЛИЗАЦИЯ МЕТРИК
+  grafana:
+    image: grafana/grafana:latest
+    container_name: smi_grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=smi_admin_2024
+    networks:
+      - smi_network
+
+  # NGINX для веб-интерфейсов
+  nginx:
+    image: nginx:alpine
+    container_name: smi_nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - smi_network
+
+networks:
+  smi_network:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
