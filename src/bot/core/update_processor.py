@@ -140,13 +140,12 @@ class UpdateProcessor:
             else:
                 logger.info(f"❓ Неизвестное сообщение: '{text}'")
                 await self.bot.send_message(
-                    "ℹ️ Используйте кнопки снизу или отправьте ссылку на канал.\n"
-                    "Для дайджеста: /digest\nДля справки: /help"
+                    "ℹ️ Используйте /start для вызова главного меню.\n"
+                    "Для дайджеста: /digest"
                 )
                 
                 if self.bot.delete_commands and message_id:
                     await self._delete_user_message(message_id, chat_id)
-                    
         except Exception as e:
             logger.error(f"❌ Ошибка обработки сообщения: {e}")
     
