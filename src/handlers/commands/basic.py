@@ -7,14 +7,13 @@ import asyncio
 from loguru import logger
 
 if TYPE_CHECKING:
-    from src.telegram_bot import TelegramBot
+    from src.bot import TelegramBot
 
 
 class BasicCommands:
     def __init__(self, bot: "TelegramBot") -> None:
         self.bot = bot
         self.digest_generator = None
-        # Инициализируем генератор дайджестов
         self._init_digest_generator()
 
     async def start(self, message: Optional[Dict[str, Any]]) -> None:
@@ -22,10 +21,9 @@ class BasicCommands:
         to_group = self.bot.is_message_from_group(chat_id) if chat_id else None
 
         keyboard = [
-            [{"text": "📊 Статус", "callback_data": "status"}, {"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
-            [{"text": "➕ Добавить канал", "callback_data": "add_channel"}, {"text": "📡 Принудительная подписка", "callback_data": "force_subscribe"}],
+            [{"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
+            [{"text": "➕ Добавить канал", "callback_data": "add_channel"}],
             [{"text": "🚀 Запуск", "callback_data": "start_monitoring"}, {"text": "🛑 Стоп", "callback_data": "stop_monitoring"}],
-            [{"text": "🔄 Рестарт", "callback_data": "restart"}, {"text": "⚙️ Настройки", "callback_data": "settings"}],
             [{"text": "📰 Дайджест", "callback_data": "digest"}, {"text": "🆘 Справка", "callback_data": "help"}],
         ]
 
@@ -42,13 +40,11 @@ class BasicCommands:
             "🛑 /kill_switch - полная блокировка\n"
             "🔓 /unlock - разблокировать бота\n"
             "📂 /topic_id - узнать ID темы в группе\n"
-            "📡 /force_subscribe - принудительная подписка на каналы\n"
-            "⚙️ /settings - настройки интерфейса\n\n"
+            "📡 /force_subscribe - принудительная подписка на каналы\n\n"
             "⌨️ <b>Или используйте кнопки ниже:</b>\n\n"
             "⚠️ <b>В группе:</b> пишите команды в чат напрямую, не отвечайте на сообщения бота!"
         )
 
-        await self.bot.remove_old_keyboard(to_group)
         await self.bot.send_message_with_keyboard(welcome_text, keyboard, use_reply_keyboard=False, to_group=to_group)
 
     async def help(self, message: Optional[Dict[str, Any]]) -> None:
@@ -63,8 +59,6 @@ class BasicCommands:
             "• /channels - список отслеживаемых каналов\n"
             "• /add_channel [ссылка] - добавить канал\n"
             "• /stats - статистика за сегодня\n\n"
-            "📋 <b>Команды настройки:</b>\n"
-            "• /settings - настройки интерфейса\n\n"
             "⌨️ <b>Кнопки снизу экрана:</b>\n"
             "• 🚀 Запуск - запустить мониторинг\n"
             "• 🛑 Стоп - остановить мониторинг\n"
@@ -74,7 +68,6 @@ class BasicCommands:
             "• ➕ Добавить канал - помощь по добавлению\n"
             "• 📡 Принудительная подписка - подключить каналы\n"
             "• 📰 Дайджест - топ новостей за период\n"
-            "• ⚙️ Настройки - настройки интерфейса\n\n"
             "<b>💡 Примеры добавления каналов:</b>\n"
             "• <code>/add_channel https://t.me/news_channel</code>\n"
             "• <code>https://t.me/news_channel</code> (просто ссылка)\n"
@@ -91,7 +84,6 @@ class BasicCommands:
             "<b>🔧 Назначение команд:</b>\n"
             "• <b>Запуск</b> - начинает мониторинг добавленных каналов\n"
             "• <b>Стоп</b> - останавливает мониторинг (каналы остаются)\n"
-            "• <b>Настройки</b> - управление интерфейсом (удаление команд, редактирование сообщений)"
         )
 
         keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
@@ -159,14 +151,18 @@ class BasicCommands:
         await self.bot.send_message_with_keyboard(status_text, keyboard, use_reply_keyboard=False, to_group=to_group)
 
     async def start_monitoring(self, message: Optional[Dict[str, Any]]) -> None:
-        keyboard = [["🛑 Стоп", "📊 Статус"], ["🏠 Главное меню"]]
+        keyboard = [
+            [{"text": "🛑 Стоп", "callback_data": "stop_monitoring"}, {"text": "📊 Статус", "callback_data": "status"}],
+            [{"text": "🏠 Главное меню", "callback_data": "start"}]
+        ]
         if not self.bot.monitor_bot:
-            await self.bot.send_message_with_keyboard("❌ <b>Ошибка</b>\n\nНет доступа к системе мониторинга", keyboard)
+            await self.bot.send_message_with_keyboard("❌ <b>Ошибка</b>\n\nНет доступа к системе мониторинга", keyboard, use_reply_keyboard=False)
             return
         if self.bot.monitor_bot.monitoring_active:
             await self.bot.send_message_with_keyboard(
                 "⚠️ <b>Мониторинг уже работает</b>\n\nИспользуйте кнопку 🛑 для остановки",
                 keyboard,
+                use_reply_keyboard=False
             )
             return
         await self.bot.monitor_bot.resume_monitoring()
@@ -178,33 +174,45 @@ class BasicCommands:
             "🗄️ <b>База данных:</b> ✅ Подключена\n"
             "🧠 <b>ИИ анализатор:</b> ✅ Готов\n"
             "📺 <b>Мониторинг каналов:</b> ✅ Активен\n"
-            "🌐 <b>Веб-интерфейс:</b> ✅ http://localhost:8080\n\n"
             f"🕐 {current_time} (Владивосток)",
             keyboard,
+            use_reply_keyboard=False
         )
 
     async def stop_monitoring(self, message: Optional[Dict[str, Any]]) -> None:
-        keyboard = [["🚀 Запуск", "📊 Статус"], ["🏠 Главное меню"]]
+        keyboard = [
+            [{"text": "🚀 Запуск", "callback_data": "start_monitoring"}],
+            [{"text": "📊 Статус", "callback_data": "status"}, {"text": "🏠 Главное меню", "callback_data": "start"}]
+        ]
+        
         if not self.bot.monitor_bot:
-            await self.bot.send_message_with_keyboard("❌ <b>Ошибка</b>\n\nНет доступа к системе мониторинга", keyboard)
+            await self.bot.send_message_with_keyboard("❌ <b>Ошибка</b>\n\nНет доступа к системе мониторинга", keyboard, use_reply_keyboard=False)
             return
+            
         if not self.bot.monitor_bot.monitoring_active:
             await self.bot.send_message_with_keyboard(
                 "⚠️ <b>Мониторинг уже остановлен</b>\n\nИспользуйте кнопку 🚀 для запуска",
                 keyboard,
+                use_reply_keyboard=False
             )
             return
+            
         await self.bot.monitor_bot.pause_monitoring()
-        vladivostok_tz = pytz.timezone("Asia/Vladivосток")
+        vladivostok_tz = pytz.timezone("Asia/Vladivostok")
         current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
+        
         await self.bot.send_message_with_keyboard(
             "🛑 <b>Система мониторинга остановлена</b>\n\n"
+            "📱 <b>Telegram бот:</b> ✅ Активен\n"
+            "🗄️ <b>База данных:</b> ✅ Подключена\n"
+            "📺 <b>Мониторинг каналов:</b> 🔴 Остановлен\n\n"
             f"🕐 {current_time} (Владивосток)",
             keyboard,
+            use_reply_keyboard=False
         )
 
     async def restart(self, message: Optional[Dict[str, Any]]) -> None:
-        keyboard = [["🏠 Главное меню"]]
+        keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
         vladivostok_tz = pytz.timezone("Asia/Vladivostok")
         current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
         await self.bot.send_message_with_keyboard(
@@ -215,6 +223,7 @@ class BasicCommands:
             f"🕐 {current_time} (Владивосток)\n\n"
             "⏳ <i>Пожалуйста, подождите несколько секунд...</i>",
             keyboard,
+            use_reply_keyboard=False
         )
         await asyncio.sleep(2)
         import os
@@ -225,8 +234,8 @@ class BasicCommands:
         """Создать файл полной блокировки бота"""
         try:
             keyboard = [
-                ["✅ ДА, ЗАБЛОКИРОВАТЬ", "❌ Отмена"],
-                ["🏠 Главное меню"]
+                [{"text": "✅ ДА, ЗАБЛОКИРОВАТЬ", "callback_data": "kill_switch_confirm"}],
+                [{"text": "❌ Отмена", "callback_data": "start"}, {"text": "🏠 Главное меню", "callback_data": "start"}]
             ]
             await self.bot.send_message_with_keyboard(
                 "🛑 <b>KILL SWITCH - Полная блокировка</b>\n\n"
@@ -236,6 +245,7 @@ class BasicCommands:
                 "• Потребует ручной разблокировки через /unlock\n\n"
                 "🤔 <b>Вы действительно хотите заблокировать бота?</b>",
                 keyboard,
+                use_reply_keyboard=False
             )
         except Exception as e:
             await self.bot.send_message(f"❌ Ошибка Kill Switch: {e}")
@@ -248,7 +258,7 @@ class BasicCommands:
             
             if os.path.exists(stop_file):
                 os.remove(stop_file)
-                keyboard = [["🏠 Главное меню"]]
+                keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
                 vladivostok_tz = pytz.timezone("Asia/Vladivосток")
                 current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
                 await self.bot.send_message_with_keyboard(
@@ -256,15 +266,17 @@ class BasicCommands:
                     "✅ Файл блокировки удален\n"
                     "✅ Бот готов к запуску\n\n"
                     f"🕐 {current_time} (Владивосток)\n\n"
-                    "💡 <i>Systemd может автоматически перезапустить бота</i>",
-                    keyboard,
+                "💡 <i>Systemd может автоматически перезапустить бота</i>",
+                keyboard,
+                use_reply_keyboard=False,
                 )
             else:
-                keyboard = [["🏠 Главное меню"]]
+                keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
                 await self.bot.send_message_with_keyboard(
                     "ℹ️ <b>Бот не заблокирован</b>\n\n"
                     "Файл блокировки STOP_BOT отсутствует",
                     keyboard,
+                    use_reply_keyboard=False
                 )
         except Exception as e:
             await self.bot.send_message(f"❌ Ошибка разблокировки: {e}")
@@ -353,8 +365,7 @@ class BasicCommands:
             channel_text += f"📅 Период: {days} дней\n\n"
             channel_text += "📝 <b>Отправьте ссылку на канал:</b>\n"
             channel_text += "• <code>https://t.me/channel_name</code>\n"
-            channel_text += "• <code>@channel_name</code>\n"
-            channel_text += "• <code>channel_name</code>\n\n"
+            channel_text += "• <code>@channel_name</code>\n\n"
             channel_text += "Или выберите \"🌍 Все каналы\" для общего дайджеста\n\n"
             channel_text += "💡 <b>Примеры команд:</b>\n"
             channel_text += "• <code>/digest</code> - неделя\n"
@@ -477,8 +488,26 @@ class BasicCommands:
         if chat_type not in ["group", "supergroup"]:
             await self.bot.send_message(
                 "❌ <b>Эта команда работает только в группах</b>\n\n"
-                "Отправьте команду /topic_id в нужной теме группы"
+                "Отправьте команду /topic_id в нужной теме группы для получения её ID"
             )
+            return
+            
+        if not self.bot.waiting_for_topic_id:
+            response_text = (
+                f"ℹ️ <b>ID ТЕМЫ</b>\n\n"
+                f"📂 <b>Группа:</b> {chat_title}\n"
+                f"🏠 <b>Chat ID:</b> <code>{chat_id}</code>\n"
+            )
+            
+            if thread_id:
+                response_text += f"🆔 <b>Topic ID:</b> <code>{thread_id}</code>\n\n"
+                response_text += "💡 Чтобы исключить эту тему из обработки бота,\n"
+                response_text += f"добавьте <code>{thread_id}</code> в excluded_topics в config.yaml"
+            else:
+                response_text += "📋 <b>Тема:</b> Общая лента (главная)\n"
+                response_text += "🆔 <b>Topic ID:</b> <code>null</code>"
+            
+            await self.bot.send_message(response_text)
             return
 
         self.bot.pending_topic_data = {  # type: ignore[attr-defined]
@@ -502,17 +531,29 @@ class BasicCommands:
                 [{"text": "📋 Только показать информацию", "callback_data": "no_action"}],
             ]
         else:
+            self.bot.pending_topic_id = thread_id
+            
             response_text = (
                 f"🎯 <b>ID ТЕМЫ ПОЛУЧЕН!</b>\n\n"
                 f"📂 <b>Группа:</b> {chat_title}\n"
                 f"🏠 <b>Chat ID:</b> <code>{chat_id}</code>\n"
-                f"📋 <b>Тема:</b> Текущая тема\n"
                 f"🆔 <b>Topic ID:</b> <code>{thread_id}</code>\n\n"
                 f"📝 <b>Выберите регион для автоматического добавления:</b>"
             )
-            regions = await self.bot.load_regions_from_config()  # type: ignore[attr-defined]
-            keyboard = [[{"text": f"{r['emoji']} {r['name']}", "callback_data": f"auto_add_topic_{r['key']}"}] for r in regions]
-            keyboard.append([{"text": "📋 Только показать информацию", "callback_data": "no_action"}])
+            if self.bot.monitor_bot and hasattr(self.bot.monitor_bot, 'config_loader'):
+                config_loader = self.bot.monitor_bot.config_loader
+                config_loader.load_config()
+                config_loader.load_regions_config() 
+                regions = config_loader.get_regions_config()
+                logger.info(f"🔄 Перезагружена конфигурация регионов: {list(regions.keys())}")
+            else:
+                regions = {}
+            keyboard = []
+            for region_key, region_data in regions.items():
+                emoji = region_data.get('emoji', '📍')
+                name = region_data.get('name', region_key.title())
+                display_name = name if name.startswith(emoji) else f"{emoji} {name}"
+                keyboard.append([{"text": display_name, "callback_data": f"auto_add_topic_{region_key}"}])
 
         await self.bot.send_message_with_keyboard(response_text, keyboard, use_reply_keyboard=False)
 

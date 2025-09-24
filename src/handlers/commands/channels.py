@@ -42,7 +42,6 @@ class ChannelCommands:
                 await self.bot.send_message("❌ Telegram мониторинг недоступен")
                 return
 
-            self.bot.main_instance.clear_subscription_cache()
             if hasattr(self.bot.main_instance.telegram_monitor, "clear_cache"):
                 await self.bot.main_instance.telegram_monitor.clear_cache()
 

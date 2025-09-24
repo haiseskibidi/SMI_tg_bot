@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from src.telegram_bot import TelegramBot
+from src.bot import TelegramBot
 from src.database import DatabaseManager
 import yaml
 from loguru import logger

@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from typing import Set
+from typing import Set, Dict
 from loguru import logger
 
 
@@ -23,6 +23,16 @@ class SubscriptionCacheManager:
         except Exception as e:
             logger.error(f"❌ Ошибка загрузки кэша подписок: {e}")
             self.subscribed_channels = set()
+    
+    def sync_cache_with_config(self, current_channels: set):
+        before_count = len(self.subscribed_channels)
+        
+        removed_channels = self.subscribed_channels - current_channels
+        if removed_channels:
+            logger.info(f"🧹 Удаляем из кэша несуществующие каналы: {list(removed_channels)}")
+            self.subscribed_channels = self.subscribed_channels & current_channels
+            self.save_subscription_cache()
+            logger.info(f"💾 Кэш синхронизирован: {before_count} → {len(self.subscribed_channels)} каналов")
 
     def save_subscription_cache(self):
         try:

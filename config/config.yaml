@@ -85,11 +85,16 @@ logging:
 monitoring: null
 output:
   target_group: YOUR_TARGET_GROUP_FROM_ENV
+  excluded_topics:
+    - 26  # Флуд
+    # Добавьте сюда ID других служебных тем (оффтоп, админ)
+    # Используйте /topic_id в нужной теме чтобы узнать ID
   topics:
     chita: 32
     general: null
     kamchatka: 5
     sakhalin: 2
+    vladivostok: 1020
     yakutsk: 890
 regions:
   chita:
@@ -168,6 +173,14 @@ regions:
     - '65'
     name: 🏝️ Сахалин
     topic_id: 2
+  vladivostok:
+    created_at: '2025-09-20'
+    description: Регион Владивосток
+    emoji: 🌅
+    keywords:
+    - 🌅 владивосток
+    name: 🌅 Владивосток
+    topic_id: 1020
   yakutsk:
     created_at: '2025-08-26'
     description: Республика Саха (Якутия)
@@ -194,5 +207,3 @@ system:
 telegram:
   api_hash: YOUR_API_HASH_FROM_ENV
   api_id: YOUR_API_ID_FROM_ENV
-web:
-  port: 8080
