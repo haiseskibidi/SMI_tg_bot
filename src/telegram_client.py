@@ -38,6 +38,32 @@ class TelegramMonitor:
         
         logger.info("📱 TelegramMonitor инициализирован")
     
+    async def is_already_joined(self, entity) -> bool:
+        try:
+            from telethon.tl.functions.channels import GetParticipantRequest
+            from telethon.errors import UserNotParticipantError, ChatAdminRequiredError
+            
+            try:
+                await self.client(GetParticipantRequest(
+                    channel=entity,
+                    participant=await self.client.get_me()
+                ))
+                return True
+            except (UserNotParticipantError, ChatAdminRequiredError):
+                return False
+            except Exception:
+                dialogs = await self.client.get_dialogs(limit=None)
+                
+                for dialog in dialogs:
+                    if dialog.entity.id == entity.id:
+                        return True
+                
+                return False
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки подписки: {e}")
+            return False
+    
     async def initialize(self):
         """Инициализация Telegram клиента"""
         try:

@@ -159,6 +159,13 @@ class ChannelMonitor:
         logger.info(f"💾 Найдено в кэше: {len(cached_channels)} каналов")
         logger.info(f"🆕 Новых каналов: {len(new_channels)} (требуют медленной обработки)")
         
+        if new_channels and len(new_channels) <= 10:
+            new_usernames = [ch['username'] for ch in new_channels]
+            logger.info(f"📋 Список новых каналов: {new_usernames}")
+        elif len(new_channels) > 10:
+            new_usernames = [ch['username'] for ch in new_channels[:5]]
+            logger.info(f"📋 Первые 5 новых каналов: {new_usernames}... и еще {len(new_channels)-5}")
+        
         # Быстро получаем entity для кешированных каналов
         monitored_channels = []
         for i, channel_config in enumerate(cached_channels):
@@ -306,6 +313,10 @@ class ChannelMonitor:
             # Обычный режим - обрабатываем все каналы медленно
             return await self._slow_process_new_channels(all_channels)[0]
         
+        # СИНХРОНИЗАЦИЯ КЭША: удаляем несуществующие каналы
+        current_channels = {ch['username'] for ch in all_channels}
+        self.subscription_cache.sync_cache_with_config(current_channels)
+        
         # ЭТАП 1: Быстрая загрузка кешированных каналов (секунды)
         fast_channels, new_channels = await self._fast_load_cached_channels(all_channels)
         
@@ -397,6 +408,18 @@ class ChannelMonitor:
             return None
         except Exception:
             return None
+
+    async def add_single_channel_to_monitoring(self, channel_username: str) -> bool:
+        try:
+            logger.info(f"📝 Канал @{channel_username} добавлен в конфигурацию")
+            logger.info(f"🔄 Для активации мониторинга выполните /restart")
+            
+            self.subscription_cache.add_channel_to_cache(channel_username)
+            return True
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка добавления канала: {e}")
+            return False
 
     def get_monitoring_stats(self) -> Dict[str, Any]:
         return {

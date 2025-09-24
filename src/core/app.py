@@ -29,7 +29,6 @@ class NewsMonitorWithBot:
         self.telegram_bot = None
         self.news_processor = None
         self.system_monitor = None
-        self.web_interface = None
         
         # Мониторинг
         self.message_processor = None
@@ -39,12 +38,43 @@ class NewsMonitorWithBot:
         self.processed_media_groups: Set[int] = set()
 
     async def pause_monitoring(self):
-        self.monitoring_active = False
-        logger.info("⏸️ Мониторинг приостановлен")
+        """Остановка мониторинга с сохранением системы"""
+        try:
+            self.monitoring_active = False
+            
+            # Останавливаем реальные процессы мониторинга
+            if self.channel_monitor and hasattr(self.channel_monitor, 'stop_monitoring'):
+                await self.channel_monitor.stop_monitoring()
+            
+            # Отключаем Telegram клиент от получения сообщений  
+            if self.telegram_monitor and hasattr(self.telegram_monitor, 'pause_handlers'):
+                await self.telegram_monitor.pause_handlers()
+            
+            logger.info("⏸️ Мониторинг полностью приостановлен")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при остановке мониторинга: {e}")
 
     async def resume_monitoring(self):
-        self.monitoring_active = True
-        logger.info("▶️ Мониторинг возобновлен")
+        """Возобновление мониторинга"""
+        try:
+            self.monitoring_active = True
+            
+            # Возобновляем процессы мониторинга
+            if self.channel_monitor and hasattr(self.channel_monitor, 'start_monitoring'):
+                await self.channel_monitor.start_monitoring()
+            
+            # Возобновляем получение сообщений из каналов
+            if self.telegram_monitor and hasattr(self.telegram_monitor, 'resume_handlers'):
+                await self.telegram_monitor.resume_handlers()
+            elif self.channel_monitor:
+                # Пересоздаем подписки если методы resume не существуют
+                await self.channel_monitor.setup_realtime_handlers()
+            
+            logger.info("▶️ Мониторинг полностью возобновлен")
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при запуске мониторинга: {e}")
 
 
 
@@ -147,6 +177,9 @@ class NewsMonitorWithBot:
             if self.telegram_bot:
                 bot_listener_task = asyncio.create_task(self.telegram_bot.start_listening())
                 logger.info("👂 Запущен прослушиватель команд бота")
+                
+                await self.telegram_bot.send_startup_notification()
+                logger.info("📢 Отправлено уведомление о запуске системы")
             
             status_interval = 3600
             last_status_update = 0
@@ -204,7 +237,6 @@ class NewsMonitorWithBot:
         self.telegram_bot = self.lifecycle_manager.telegram_bot
         self.news_processor = self.lifecycle_manager.news_processor
         self.system_monitor = self.lifecycle_manager.system_monitor
-        self.web_interface = self.lifecycle_manager.web_interface
         
         # ВАЖНО: Устанавливаем ссылку на monitor_bot для дайджестов
         if self.telegram_bot:

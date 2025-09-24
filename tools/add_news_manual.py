@@ -6,7 +6,7 @@
 
 import asyncio
 from src.database import DatabaseManager
-from src.telegram_bot import TelegramBot
+from src.bot import TelegramBot
 import yaml
 from datetime import datetime
 from loguru import logger

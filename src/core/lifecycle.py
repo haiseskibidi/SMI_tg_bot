@@ -10,10 +10,9 @@ from loguru import logger
 if TYPE_CHECKING:
     from ..database import DatabaseManager
     from ..telegram_client import TelegramMonitor
-    from ..telegram_bot import TelegramBot
+    from ..bot import TelegramBot
     from ..news_processor import NewsProcessor
     from ..system_monitor import SystemMonitor
-    from ..web_interface import WebInterface
     from .config_loader import ConfigLoader
 
 
@@ -29,7 +28,6 @@ class LifecycleManager:
         self.telegram_bot: Optional["TelegramBot"] = None
         self.news_processor: Optional["NewsProcessor"] = None
         self.system_monitor: Optional["SystemMonitor"] = None
-        self.web_interface: Optional["WebInterface"] = None
 
     def setup_logging(self):
         try:
@@ -65,7 +63,7 @@ class LifecycleManager:
         try:
             from ..database import DatabaseManager
             from ..telegram_client import TelegramMonitor
-            from ..telegram_bot import create_bot_from_config
+            from ..bot import create_bot_from_config
             from ..news_processor import NewsProcessor
             from ..system_monitor import SystemMonitor
 
@@ -142,8 +140,6 @@ class LifecycleManager:
             if self.telegram_monitor:
                 await self.telegram_monitor.disconnect()
             
-            if self.web_interface:
-                self.web_interface.stop_server()
             
         except Exception as e:
             logger.error(f"❌ Ошибка при завершении: {e}")

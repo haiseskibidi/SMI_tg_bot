@@ -157,6 +157,17 @@ regions:
     - title: Канал @minsotc65
       username: minsotc65
     name: 🏝️ Сахалин
+  vladivostok:
+    channels:
+    - title: Канал @actualvdk
+      username: actualvdk
+    - title: Канал @gorod_vl
+      username: gorod_vl
+    - title: Канал @novosti_vdk
+      username: novosti_vdk
+    - title: Канал @testKANALbyMe
+      username: testKANALbyMe
+    name: 🌅 Владивосток
   yakutsk:
     channels:
     - title: Канал @djiikeytop

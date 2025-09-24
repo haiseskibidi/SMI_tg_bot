@@ -361,21 +361,8 @@ class DigestGenerator:
             logger.info(f"📊 Найдено {len(messages)} сообщений в канале @{channel_username} из {total_messages_checked} проверенных")
             
             if not messages:
-                # Добавляем отладочную информацию в пустой дайджест
-                regional_keywords = self._get_regional_keywords(channel_username)
-                debug_info = f"\n\n🔍 <b>Отладочная информация:</b>\n"
-                debug_info += f"• Проверено сообщений: {total_messages_checked}\n"
-                debug_info += f"• Период поиска: {start_date.strftime('%d.%m.%Y %H:%M')} - {end_date.strftime('%d.%m.%Y %H:%M')}\n"
-                debug_info += f"• Текущее время: {datetime.now(self.vladivostok_tz).strftime('%d.%m.%Y %H:%M')}\n"
-                debug_info += f"• Фильтры: активность > 0 ИЛИ просмотры > 1000, исключен 'ночной чат', исключена #политика\n"
-                debug_info += f"• Бонусы: +50% за @{channel_username}, +30% за региональность\n"
-                if regional_keywords:
-                    debug_info += f"• Региональные слова: {', '.join(regional_keywords[:5])}..."
-                else:
-                    debug_info += f"• Региональный бонус отключен для канала @{channel_username}"
-                
                 empty_digest = self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
-                return empty_digest + debug_info
+                return empty_digest
             
             # Сортируем по популярности и берем топ-30 для пагинации
             all_top_messages = sorted(messages, key=lambda x: x['popularity_score'], reverse=True)[:30]
