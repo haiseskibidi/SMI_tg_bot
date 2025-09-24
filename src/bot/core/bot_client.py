@@ -469,8 +469,8 @@ class TelegramBot:
     async def send_startup_notification(self) -> bool:
         try:
             import pytz
-            vladivostok_tz = pytz.timezone('Asia/Vladivostok')
-            current_time = datetime.now(vladivostok_tz)
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            current_time = datetime.now(moscow_tz)
             
             message = f"""
 🚀 <b>Система мониторинга запущена!</b>
@@ -480,7 +480,7 @@ class TelegramBot:
 ⚡ Real-time мониторинг активен
 👂 Прослушивание команд включено
 
-🕐 {current_time.strftime('%d.%m.%Y %H:%M:%S')} (Владивосток)
+🕐 {current_time.strftime('%d.%m.%Y %H:%M:%S')} (Москва)
 
 💬 Используйте /start для управления системой
 """

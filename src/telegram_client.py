@@ -24,8 +24,8 @@ class TelegramMonitor:
         self.client = None
         self.is_connected = False  # Флаг успешного подключения как пользователь
         import pytz
-        vladivostok_tz = pytz.timezone('Asia/Vladivostok')
-        self.start_time = datetime.now(vladivostok_tz)  # Время запуска бота во Владивостоке (UTC+10)
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        self.start_time = datetime.now(moscow_tz)  # Время запуска бота в Москве (UTC+3)
         
         # Кэш для оптимизации (ограниченный размер)
         self.channels_cache = {}

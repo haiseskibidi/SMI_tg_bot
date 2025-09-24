@@ -79,12 +79,12 @@ class MessageProcessor:
         msg_time = message.date
         start_time = self.app_instance.telegram_monitor.start_time
         
-        vladivostok_tz = pytz.timezone('Asia/Vladivostok')
+        moscow_tz = pytz.timezone('Europe/Moscow')
         
         if msg_time.tzinfo is None:
-            msg_time = pytz.utc.localize(msg_time).astimezone(vladivostok_tz)
+            msg_time = pytz.utc.localize(msg_time).astimezone(moscow_tz)
         else:
-            msg_time = msg_time.astimezone(vladivostok_tz)
+            msg_time = msg_time.astimezone(moscow_tz)
         
         logger.info(f"⏰ Время сообщения: {msg_time.strftime('%d.%m.%Y %H:%M:%S %Z')}, время запуска бота: {start_time.strftime('%d.%m.%Y %H:%M:%S %Z')}")
         
@@ -95,13 +95,13 @@ class MessageProcessor:
         return True
 
     def _create_message_data(self, message, channel_username: str) -> Dict[str, Any]:
-        vladivostok_tz = pytz.timezone('Asia/Vladivostok')
+        moscow_tz = pytz.timezone('Europe/Moscow')
         msg_time = message.date
         
         if msg_time.tzinfo is None:
-            msg_time = pytz.utc.localize(msg_time).astimezone(vladivostok_tz)
+            msg_time = pytz.utc.localize(msg_time).astimezone(moscow_tz)
         else:
-            msg_time = msg_time.astimezone(vladivostok_tz)
+            msg_time = msg_time.astimezone(moscow_tz)
         
         text_for_hash = message.text or ''
         content_hash = hashlib.md5(
@@ -167,8 +167,8 @@ class MessageProcessor:
             await self.app_instance.send_message_to_target(message_data, is_media=False)
 
     async def _update_last_check_time(self, channel_username: str):
-        vladivostok_tz = pytz.timezone('Asia/Vladivostok')
-        current_time_vlk = datetime.now(vladivostok_tz)
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        current_time_vlk = datetime.now(moscow_tz)
         await self.database.update_last_check_time(channel_username, current_time_vlk)
 
     def clear_media_groups_cache(self):

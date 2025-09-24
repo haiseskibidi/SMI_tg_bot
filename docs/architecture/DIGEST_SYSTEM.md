@@ -61,7 +61,7 @@ class DigestGenerator:
     def __init__(self, database_manager, telegram_monitor=None):
         self.db = database_manager                    # Доступ к базе данных
         self.telegram_monitor = telegram_monitor      # Telethon для live чтения
-        self.vladivostok_tz = pytz.timezone("Asia/Vladivostok")  # Часовой пояс
+        self.moscow_tz = pytz.timezone("Europe/Moscow")  # Часовой пояс
         self._last_digest_data = None                 # Кэш для пагинации
 ```
 
@@ -85,7 +85,7 @@ async def generate_weekly_digest(
         start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
         end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
     else:
-        end_date = datetime.now(self.vladivostok_tz)
+        end_date = datetime.now(self.moscow_tz)
         start_date = end_date - timedelta(days=days)
     
     # Запрос к базе данных с фильтрами

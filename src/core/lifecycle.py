@@ -138,7 +138,7 @@ class LifecycleManager:
                 
                 await self.telegram_bot.send_system_notification(
                     "🛑 <b>Система мониторинга остановлена</b>\n\n"
-                    f"🕐 {datetime.now(pytz.timezone('Asia/Vladivostok')).strftime('%d.%m.%Y %H:%M:%S')} (Владивосток)"
+                    f"🕐 {datetime.now(pytz.timezone('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S')} (Москва)"
                 )
             
             if self.database:

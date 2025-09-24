@@ -137,9 +137,9 @@ class BasicCommands:
         else:
             status_text += "💡 <b>Состояние:</b> Для запуска нажмите 🚀 Запуск\n\n"
 
-        vladivostok_tz = pytz.timezone("Asia/Vladivostok")
-        current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
-        status_text += f"🕐 {current_time} (Владивосток)"
+        moscow_tz = pytz.timezone("Europe/Moscow")
+        current_time = datetime.now(moscow_tz).strftime("%d.%m.%Y %H:%M:%S")
+        status_text += f"🕐 {current_time} (Москва)"
 
         keyboard = [
             [{"text": "🗂️ Управление каналами", "callback_data": "manage_channels"}],
@@ -166,15 +166,15 @@ class BasicCommands:
             )
             return
         await self.bot.monitor_bot.resume_monitoring()
-        vladivostok_tz = pytz.timezone("Asia/Vladivostok")
-        current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
+        moscow_tz = pytz.timezone("Europe/Moscow")
+        current_time = datetime.now(moscow_tz).strftime("%d.%m.%Y %H:%M:%S")
         await self.bot.send_message_with_keyboard(
             "🚀 <b>Система мониторинга запущена!</b>\n\n"
             "📱 <b>Telegram бот:</b> ✅ Активен\n"
             "🗄️ <b>База данных:</b> ✅ Подключена\n"
             "🧠 <b>ИИ анализатор:</b> ✅ Готов\n"
             "📺 <b>Мониторинг каналов:</b> ✅ Активен\n"
-            f"🕐 {current_time} (Владивосток)",
+            f"🕐 {current_time} (Москва)",
             keyboard,
             use_reply_keyboard=False
         )
@@ -198,29 +198,29 @@ class BasicCommands:
             return
             
         await self.bot.monitor_bot.pause_monitoring()
-        vladivostok_tz = pytz.timezone("Asia/Vladivostok")
-        current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
+        moscow_tz = pytz.timezone("Europe/Moscow")
+        current_time = datetime.now(moscow_tz).strftime("%d.%m.%Y %H:%M:%S")
         
         await self.bot.send_message_with_keyboard(
             "🛑 <b>Система мониторинга остановлена</b>\n\n"
             "📱 <b>Telegram бот:</b> ✅ Активен\n"
             "🗄️ <b>База данных:</b> ✅ Подключена\n"
             "📺 <b>Мониторинг каналов:</b> 🔴 Остановлен\n\n"
-            f"🕐 {current_time} (Владивосток)",
+            f"🕐 {current_time} (Москва)",
             keyboard,
             use_reply_keyboard=False
         )
 
     async def restart(self, message: Optional[Dict[str, Any]]) -> None:
         keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
-        vladivostok_tz = pytz.timezone("Asia/Vladivostok")
-        current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
+        moscow_tz = pytz.timezone("Europe/Moscow")
+        current_time = datetime.now(moscow_tz).strftime("%d.%m.%Y %H:%M:%S")
         await self.bot.send_message_with_keyboard(
             "🔄 <b>Перезапуск системы...</b>\n\n"
             "🔄 Останавливаем мониторинг...\n"
             "💾 Сохраняем данные...\n"
             "🚀 Запускаем новый процесс...\n\n"
-            f"🕐 {current_time} (Владивосток)\n\n"
+            f"🕐 {current_time} (Москва)\n\n"
             "⏳ <i>Пожалуйста, подождите несколько секунд...</i>",
             keyboard,
             use_reply_keyboard=False
@@ -259,13 +259,13 @@ class BasicCommands:
             if os.path.exists(stop_file):
                 os.remove(stop_file)
                 keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
-                vladivostok_tz = pytz.timezone("Asia/Vladivосток")
-                current_time = datetime.now(vladivostok_tz).strftime("%d.%m.%Y %H:%M:%S")
+                moscow_tz = pytz.timezone("Europe/Moscow")
+                current_time = datetime.now(moscow_tz).strftime("%d.%m.%Y %H:%M:%S")
                 await self.bot.send_message_with_keyboard(
                     "🔓 <b>БОТ РАЗБЛОКИРОВАН!</b>\n\n"
                     "✅ Файл блокировки удален\n"
                     "✅ Бот готов к запуску\n\n"
-                    f"🕐 {current_time} (Владивосток)\n\n"
+                    f"🕐 {current_time} (Москва)\n\n"
                 "💡 <i>Systemd может автоматически перезапустить бота</i>",
                 keyboard,
                 use_reply_keyboard=False,

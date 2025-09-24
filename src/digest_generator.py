@@ -16,7 +16,7 @@ class DigestGenerator:
     def __init__(self, database_manager, telegram_monitor=None):
         self.db = database_manager
         self.telegram_monitor = telegram_monitor
-        self.vladivostok_tz = pytz.timezone("Asia/Vladivostok")
+        self.moscow_tz = pytz.timezone("Europe/Moscow")
         self._last_digest_data = None  # Для хранения данных пагинации
     
     async def generate_weekly_digest(
@@ -45,7 +45,7 @@ class DigestGenerator:
                 start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
                 end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
             else:
-                end_date = datetime.now(self.vladivostok_tz)
+                end_date = datetime.now(self.moscow_tz)
                 start_date = end_date - timedelta(days=days)
             
             # Форматируем даты для отображения
@@ -228,11 +228,11 @@ class DigestGenerator:
                 start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
                 end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
                 # Добавляем timezone для корректного сравнения
-                start_date = self.vladivostok_tz.localize(start_date)
-                end_date = self.vladivostok_tz.localize(end_date.replace(hour=23, minute=59, second=59))
+                start_date = self.moscow_tz.localize(start_date)
+                end_date = self.moscow_tz.localize(end_date.replace(hour=23, minute=59, second=59))
             else:
                 # Правильная логика: полные дни
-                end_date = datetime.now(self.vladivostok_tz).replace(hour=23, minute=59, second=59, microsecond=0)
+                end_date = datetime.now(self.moscow_tz).replace(hour=23, minute=59, second=59, microsecond=0)
                 start_date = (end_date - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
             
             logger.info(f"📰 Читаем сообщения из @{channel_username} за период {start_date.date()} - {end_date.date()}")
@@ -270,7 +270,7 @@ class DigestGenerator:
                     message_date = pytz.UTC.localize(message_date)
                 
                 # Конвертируем в наш timezone для сравнения
-                message_date = message_date.astimezone(self.vladivostok_tz)
+                message_date = message_date.astimezone(self.moscow_tz)
                 
                 # Фильтруем по дате
                 if message_date < start_date or message_date > end_date:

@@ -208,12 +208,12 @@ class NewsMonitorWithBot:
             if not self.telegram_bot:
                 return
             
-            vladivostok_tz = pytz.timezone('Asia/Vladivostok')
-            current_time = datetime.now(vladivostok_tz)
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            current_time = datetime.now(moscow_tz)
             
             status_text = (
                 f"📊 <b>Статус системы</b>\n"
-                f"🕐 {current_time.strftime('%d.%m.%Y %H:%M:%S')} (Владивосток)\n"
+                f"🕐 {current_time.strftime('%d.%m.%Y %H:%M:%S')} (Москва)\n"
                 f"🔄 Мониторинг: {'🟢 Активен' if self.monitoring_active else '🔴 Приостановлен'}\n"
             )
             
@@ -352,7 +352,7 @@ class NewsMonitorWithBot:
             if date:
                 try:
                     if hasattr(date, 'strftime'):
-                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Москва)"
                     else:
                         date_str = f"\n📅 {date}"
                 except:
@@ -627,7 +627,7 @@ class NewsMonitorWithBot:
                     return False
             
             try:
-                vladivostok_tz = pytz.timezone('Asia/Vladivostok')
+                moscow_tz = pytz.timezone('Europe/Moscow')
                 date = news.get('date')
                 if date:
                     try:
@@ -635,8 +635,8 @@ class NewsMonitorWithBot:
                             date = datetime.fromisoformat(date.replace('Z', '+00:00'))
                         if date.tzinfo is None:
                             date = date.replace(tzinfo=pytz.UTC)
-                        date_vlk = date.astimezone(vladivostok_tz)
-                        date_str = f"\n📅 {date_vlk.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                        date_vlk = date.astimezone(moscow_tz)
+                        date_str = f"\n📅 {date_vlk.strftime('%d.%m.%Y %H:%M')} (Москва)"
                     except:
                         date_str = ""
                 else:
@@ -705,7 +705,7 @@ class NewsMonitorWithBot:
             if date:
                 try:
                     if hasattr(date, 'strftime'):
-                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Москва)"
                     else:
                         date_str = f"\n📅 {date}"
                 except:
@@ -761,7 +761,7 @@ class NewsMonitorWithBot:
             if date:
                 try:
                     if hasattr(date, 'strftime'):
-                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Владивосток)"
+                        date_str = f"\n📅 {date.strftime('%d.%m.%Y %H:%M')} (Москва)"
                     else:
                         date_str = f"\n📅 {date}"
                 except:

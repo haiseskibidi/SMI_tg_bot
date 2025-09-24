@@ -50,7 +50,7 @@ class ManagementCommands:
                 f"📰 Всего сообщений: <b>{stats['total_messages']}</b>\n"
                 f"📤 Отобрано: <b>{stats['selected_messages']}</b>\n"
                 f"📊 Процент отбора: <b>{(stats['selected_messages'] / max(stats['total_messages'], 1) * 100):.1f}%</b>\n\n"
-                f"🕐 Последнее обновление: {datetime.now(pytz.timezone('Asia/Vladivostok')).strftime('%d.%m.%Y %H:%M:%S')}"
+                f"🕐 Последнее обновление: {datetime.now(pytz.timezone('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S')}"
             )
             
             keyboard = [
