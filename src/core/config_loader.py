@@ -6,8 +6,9 @@ from loguru import logger
 
 
 class ConfigLoader:
-    def __init__(self, config_path: str = "config/config.yaml"):
-        self.config_path = config_path
+    def __init__(self, config_path: str = None):
+        # Поддержка вариanta B: конфиг из переменной окружения
+        self.config_path = config_path or os.getenv('CONFIG_PATH', 'config/config.yaml')
         self.config = {}
         self.regions_config = {}
         self.alert_keywords = {}

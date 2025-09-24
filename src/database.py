@@ -4,6 +4,7 @@
 Оптимизирован под VPS с ограниченными ресурсами
 """
 
+import os
 import sqlite3
 import aiosqlite
 from datetime import datetime, timedelta
@@ -18,7 +19,12 @@ from pathlib import Path
 class DatabaseManager:
     """Менеджер базы данных для хранения новостей и метаданных"""
     
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str = None):
+        # Поддержка корпоративного развертывания  
+        if db_path is None:
+            data_path = os.getenv('DATA_PATH', '.')
+            db_name = os.getenv('DEPARTMENT_KEY', 'news_monitor') + '_monitor.db'
+            db_path = os.path.join(data_path, db_name)
         self.db_path = db_path
         self.lock = threading.Lock()
         

@@ -33,7 +33,14 @@ class LifecycleManager:
         try:
             log_config = self.config_loader.get_config().get('logging', {})
             
-            log_file = Path(log_config.get('file', 'logs/news_monitor.log'))
+            # Поддержка корпоративного развертывания 
+            default_log_file = 'logs/news_monitor.log'
+            if os.getenv('LOG_PATH') and os.getenv('DEPARTMENT_KEY'):
+                log_path = os.getenv('LOG_PATH')
+                dept_key = os.getenv('DEPARTMENT_KEY')
+                default_log_file = os.path.join(log_path, f'{dept_key}_monitor.log')
+            
+            log_file = Path(log_config.get('file') or default_log_file)
             log_file.parent.mkdir(exist_ok=True)
             
             logger.remove()
