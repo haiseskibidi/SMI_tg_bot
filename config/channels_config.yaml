@@ -30,8 +30,6 @@ regions:
     channels:
     - title: Канал @amur_mash
       username: amur_mash
-    - title: Канал @maximum_news
-      username: maximum_news
     name: 📰 Общие
   kamchatka:
     channels:
