@@ -105,6 +105,10 @@ class UpdateProcessor:
             
             if text.startswith("/"):
                 await self._handle_command(text, message)
+            elif await self._handle_ai_message(text, message):
+                # AI сообщение обработано
+                if self.bot.delete_commands and message_id:
+                    await self._delete_user_message(message_id, chat_id)
             elif "forward_from_chat" in message:
                 await self._handle_forwarded_message(message)
                 if self.bot.delete_commands and message_id:
@@ -315,3 +319,22 @@ class UpdateProcessor:
             logger.error(f"❌ Ошибка обработки ссылки для дайджеста: {e}")
             await self.bot.send_message(f"❌ Ошибка: {e}")
             self.bot.waiting_for_digest_channel = False
+
+    async def _handle_ai_message(self, text: str, message: Dict) -> bool:
+        """Обработка AI сообщений (начинающихся с AI:, ИИ:, АИ:)"""
+        try:
+            # Проверяем, начинается ли текст с AI префикса
+            if (text.lower().startswith('ai:') or 
+                text.lower().startswith('ии:') or 
+                text.lower().startswith('аи:')):
+                
+                logger.info(f"💬 Обрабатываем AI сообщение: {text[:50]}...")
+                
+                # Передаем обработку в BasicCommands
+                return await self.bot.basic_commands.handle_ai_message(message)
+                
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки AI сообщения: {e}")
+            return False

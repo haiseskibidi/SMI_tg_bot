@@ -5,6 +5,7 @@ from datetime import datetime
 import pytz
 import asyncio
 from loguru import logger
+from .ai_chat import AIChatHandler
 
 if TYPE_CHECKING:
     from src.bot import TelegramBot
@@ -14,7 +15,9 @@ class BasicCommands:
     def __init__(self, bot: "TelegramBot") -> None:
         self.bot = bot
         self.digest_generator = None
+        self.ai_chat = AIChatHandler(bot)
         self._init_digest_generator()
+        asyncio.create_task(self._init_ai_chat())
 
     async def start(self, message: Optional[Dict[str, Any]]) -> None:
         chat_id = message.get("chat", {}).get("id") if message else self.bot.admin_chat_id
@@ -83,7 +86,17 @@ class BasicCommands:
             "• Самый быстрый способ добавления! ⚡\n\n"
             "<b>🔧 Назначение команд:</b>\n"
             "• <b>Запуск</b> - начинает мониторинг добавленных каналов\n"
-            "• <b>Стоп</b> - останавливает мониторинг (каналы остаются)\n"
+            "• <b>Стоп</b> - останавливает мониторинг (каналы остаются)\n\n"
+            "🤖 <b>Арнольд (AI Помощник):</b>\n"
+            "• <code>/ask ваш вопрос</code> - задать вопрос Арнольду\n"
+            "• <code>AI: ваш вопрос</code> - альтернативный формат\n"
+            "• <code>ИИ: ваш вопрос</code> - на русском\n"
+            "• <code>/ai_info</code> - информация об Арнольде\n"
+            "• <code>/clear_ai</code> - очистить историю диалога\n\n"
+            "💡 <b>Примеры вопросов к Арнольду:</b>\n"
+            "• <code>/ask Найди все числа в этом тексте</code>\n"
+            "• <code>AI: Объясни что такое блокчейн</code>\n"
+            "• <code>ИИ: Придумай заголовок для новости</code>\n"
         )
 
         keyboard = [[{"text": "🏠 Главное меню", "callback_data": "start"}]]
@@ -556,5 +569,59 @@ class BasicCommands:
                 keyboard.append([{"text": display_name, "callback_data": f"auto_add_topic_{region_key}"}])
 
         await self.bot.send_message_with_keyboard(response_text, keyboard, use_reply_keyboard=False)
+
+    async def _init_ai_chat(self):
+        """Инициализация AI чата"""
+        try:
+            await asyncio.sleep(5)  # Увеличиваем задержку для стабильности
+            await self.ai_chat.initialize()
+        except Exception as e:
+            logger.error(f"❌ Ошибка инициализации AI чата: {e}")
+
+    async def ask_ai(self, message: Optional[Dict[str, Any]]) -> None:
+        """Команда /ask - задать вопрос AI"""
+        await self.ai_chat.handle_ai_question(message)
+
+    async def ai_info(self, message: Optional[Dict[str, Any]]) -> None:
+        """Команда /ai_info - информация об AI системе"""
+        await self.ai_chat.handle_ai_info(message)
+    
+    async def clear_ai_history(self, message: Optional[Dict[str, Any]]) -> None:
+        """Команда /clear_ai - очистка истории диалога с AI"""
+        try:
+            chat_id = message.get("chat", {}).get("id") if message else None
+            if chat_id:
+                self.ai_chat.clear_chat_history(chat_id)
+                await self.bot.send_message(
+                    "🧹 <b>История диалога с Арнольдом очищена</b>\n\n"
+                    "Арнольд забыл предыдущий разговор и готов к новому диалогу!"
+                )
+            else:
+                await self.bot.send_message("❌ Не удалось определить чат для очистки истории")
+        except Exception as e:
+            logger.error(f"❌ Ошибка очистки истории AI: {e}")
+            await self.bot.send_message("❌ Ошибка при очистке истории диалога")
+
+    async def handle_ai_message(self, message: Optional[Dict[str, Any]]) -> bool:
+        """Обработка сообщений, начинающихся с AI: или ИИ:"""
+        try:
+            if not message or 'text' not in message:
+                return False
+                
+            text = message['text'].strip()
+            
+            # Проверяем, начинается ли сообщение с AI префикса
+            if (text.lower().startswith('ai:') or 
+                text.lower().startswith('ии:') or 
+                text.lower().startswith('аи:')):
+                
+                await self.ai_chat.handle_ai_question(message)
+                return True
+                
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки AI сообщения: {e}")
+            return False
 
 

@@ -11,6 +11,14 @@ from .config_loader import ConfigLoader
 from .lifecycle import LifecycleManager
 from ..monitoring import SubscriptionCacheManager, ChannelMonitor, MessageProcessor
 
+# AI модули (опционально)
+try:
+    from ..ai.urgency_detector import initialize_urgency_detector
+    AI_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ AI модуль недоступен")
+    AI_AVAILABLE = False
+
 
 class NewsMonitorWithBot:
     def __init__(self, config_path: str = "config/config.yaml"):
@@ -252,6 +260,18 @@ class NewsMonitorWithBot:
                 self.message_processor,
                 self.config_loader  # Передаем config_loader для загрузки настроек таймаутов
             )
+        
+        # 🤖 Инициализируем AI модули (если доступны)
+        if AI_AVAILABLE:
+            try:
+                logger.info("🤖 Инициализация AI модулей...")
+                await initialize_urgency_detector()
+                logger.success("✅ AI модули успешно инициализированы")
+            except Exception as e:
+                logger.error(f"❌ Ошибка инициализации AI: {e}")
+                logger.warning("⚠️ Продолжаем работу без AI анализа")
+        else:
+            logger.info("ℹ️ AI модули недоступны - используется базовая логика")
         
         return True
 
@@ -546,11 +566,19 @@ class NewsMonitorWithBot:
                 messages_to_process = sorted(group_messages, key=lambda x: x.id)
                 logger.info(f"📦 Найдено {len(messages_to_process)} медиа в группе")
                 
+                # Проверяем, есть ли уже обработанный AI текст
+                ai_processed_text = news.get('text')
+                
                 for msg in messages_to_process:
                     if msg.text and msg.text.strip():
-                        text = msg.text.strip()
-                        news['text'] = text
-                        logger.info(f"📝 Найден текст в медиа-группе (длина {len(text)}): {text[:100]}{'...' if len(text) > 100 else ''}")
+                        original_text = msg.text.strip()
+                        if not ai_processed_text or ai_processed_text.strip() == "":
+                            news['text'] = original_text
+                            text = original_text  
+                            logger.info(f"📝 Найден оригинальный текст в медиа-группе (длина {len(original_text)}): {original_text[:100]}{'...' if len(original_text) > 100 else ''}")
+                        else:
+                            text = ai_processed_text  
+                            logger.info(f"📝 Используем AI обработанный текст (длина {len(ai_processed_text)}): {ai_processed_text[:100]}{'...' if len(ai_processed_text) > 100 else ''}")
                         break
             
             media_files = []

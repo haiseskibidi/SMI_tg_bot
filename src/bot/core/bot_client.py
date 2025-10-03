@@ -79,6 +79,10 @@ class TelegramBot:
             "manage_channels": self.management_commands.manage_channels,
             "stats": self.management_commands.stats,
             "force_subscribe": self.channel_commands.force_subscribe,
+            # AI команды
+            "ask": self.basic_commands.ask_ai,
+            "ai_info": self.basic_commands.ai_info,
+            "clear_ai": self.basic_commands.clear_ai_history,
         }
         
         for command, handler in commands.items():
@@ -151,9 +155,11 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"❌ Ошибка установки команд: {e}")
     
-    async def send_message(self, text: str, parse_mode: str = "HTML", to_group: bool = True, to_user: int = None) -> bool:
+    async def send_message(self, text: str, parse_mode: str = "HTML", to_group: bool = True, to_user: int = None, chat_id: int = None):
         try:
-            if to_user:
+            if chat_id:
+                target_chat_id = chat_id
+            elif to_user:
                 target_chat_id = to_user
             elif self.group_chat_id:
                 target_chat_id = self.group_chat_id
@@ -162,13 +168,14 @@ class TelegramBot:
                 target_chat_id = self.admin_chat_id
                 logger.info(f"📤 Группа не настроена, отправляем админу: {self.admin_chat_id}")
             
-            return await self._send_to_single_user(text, target_chat_id, parse_mode)
+            # Если нужен message_id, возвращаем полные данные сообщения
+            return await self._send_to_single_user(text, target_chat_id, parse_mode, return_message_data=bool(chat_id))
                 
         except Exception as e:
             logger.error(f"❌ Ошибка отправки сообщения: {e}")
-            return False
+            return False if not chat_id else None
     
-    async def _send_to_single_user(self, text: str, chat_id: int, parse_mode: str = "HTML") -> bool:
+    async def _send_to_single_user(self, text: str, chat_id: int, parse_mode: str = "HTML", return_message_data: bool = False):
         try:
             data = {
                 "chat_id": chat_id,
@@ -181,14 +188,17 @@ class TelegramBot:
                 response = await client.post(f"{self.base_url}/sendMessage", json=data)
                 
                 if response.status_code == 200:
-                    return True
+                    if return_message_data:
+                        return response.json().get('result', {})
+                    else:
+                        return True
                 else:
                     logger.error(f"❌ Telegram API ошибка: {response.text}")
-                    return False
+                    return False if not return_message_data else None
                     
         except Exception as e:
             logger.error(f"❌ Ошибка HTTP запроса: {e}")
-            return False
+            return False if not return_message_data else None
     
     async def send_system_notification(self, text: str, parse_mode: str = "HTML") -> bool:
         return await self.send_message(text, parse_mode, to_group=True)
@@ -208,6 +218,48 @@ class TelegramBot:
                     
         except Exception as e:
             logger.error(f"❌ Ошибка тестирования подключения: {e}")
+            return False
+    
+    async def delete_message(self, message_id: int, chat_id: int) -> bool:
+        """Удаление сообщения из чата"""
+        try:
+            data = {
+                "chat_id": chat_id,
+                "message_id": message_id
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"{self.base_url}/deleteMessage", json=data)
+                
+                if response.status_code == 200:
+                    return True
+                else:
+                    logger.debug(f"⚠️ Не удалось удалить сообщение {message_id}: {response.text}")
+                    return False
+                    
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка удаления сообщения: {e}")
+            return False
+    
+    async def send_chat_action(self, chat_id: int, action: str = "typing") -> bool:
+        """Отправка действия в чат (typing, upload_photo и т.д.)"""
+        try:
+            data = {
+                "chat_id": chat_id,
+                "action": action
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"{self.base_url}/sendChatAction", json=data)
+                
+                if response.status_code == 200:
+                    return True
+                else:
+                    logger.debug(f"⚠️ Не удалось отправить действие {action}: {response.text}")
+                    return False
+                    
+        except Exception as e:
+            logger.debug(f"⚠️ Ошибка отправки действия: {e}")
             return False
     
     async def send_message_with_keyboard(self, text: str, keyboard: list = None, **kwargs):

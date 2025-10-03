@@ -207,3 +207,17 @@ system:
 telegram:
   api_hash: YOUR_API_HASH_FROM_ENV
   api_id: YOUR_API_ID_FROM_ENV
+ai:
+  enabled: true
+  urgency_detection:
+    enabled: true
+    min_score_urgent: 0.7    # Порог для срочных новостей
+    min_score_important: 0.4  # Порог для важных новостей
+    use_ollama: true         # Использовать Ollama (локальная AI)
+    ollama:
+      url: "http://localhost:11434"  # Адрес Ollama сервера
+      model: "qwen2.5:7b"           # Модель для анализа
+      timeout_seconds: 30           # Таймаут для AI запросов
+    processing:
+      max_text_length: 500   # Максимальная длина текста для анализа
+      fallback_on_error: true # Продолжать работу при ошибках AI
