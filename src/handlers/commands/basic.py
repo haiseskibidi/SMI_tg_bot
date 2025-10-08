@@ -112,7 +112,7 @@ class BasicCommands:
         monitoring_emoji = "📡" if is_running else "⏹️"
 
         try:
-            channels = await self.bot.get_channels_from_config()  # type: ignore[attr-defined]
+            channels = await self.bot.get_channels_from_config()  
             channels_count = len(channels)
         except Exception:
             channels_count = 0
@@ -306,7 +306,7 @@ class BasicCommands:
                     logger.debug(f"🔍 Database найдена и не None")
                     
                     from src.digest_generator import DigestGenerator
-                    # Передаем как database, так и telegram_monitor
+                    
                     telegram_monitor = getattr(self.bot.monitor_bot, 'telegram_monitor', None)
                     self.digest_generator = DigestGenerator(
                         self.bot.monitor_bot.database, 
@@ -347,15 +347,15 @@ class BasicCommands:
                 await self.bot.send_message(error_msg)
                 return
 
-            # Разбираем параметры команды если есть
+            
             command_text = message.get("text", "") if message else ""
             params = command_text.split()[1:] if command_text else []
             
-            days = 7  # по умолчанию неделя
+            days = 7  
             custom_start = None
             custom_end = None
             
-            # Парсим параметры
+            
             if len(params) == 1:
                 try:
                     days = int(params[0])
@@ -368,7 +368,7 @@ class BasicCommands:
                 except ValueError:
                     pass
 
-            # Простой интерфейс - просим ссылку на канал
+            
             keyboard = [
                 [{"text": "🌍 Все каналы", "callback_data": f"digest_all_channels_{days}"}],
                 [{"text": "🏠 Главное меню", "callback_data": "start"}]
@@ -384,7 +384,7 @@ class BasicCommands:
             channel_text += "• <code>/digest</code> - неделя\n"
             channel_text += "• <code>/digest 14</code> - 14 дней"
 
-            # Устанавливаем состояние ожидания ссылки на канал
+            
             self.bot.waiting_for_digest_channel = True
             self.bot.digest_days = days
             
@@ -403,7 +403,7 @@ class BasicCommands:
             if not self.digest_generator:
                 return "❌ Генератор дайджестов недоступен"
 
-            # Генерируем дайджест напрямую из канала
+            
             if channel:
                 logger.info(f"📰 Генерируем live дайджест для канала @{channel}")
                 digest_result = await self.digest_generator.generate_channel_digest_live(
@@ -412,7 +412,7 @@ class BasicCommands:
                     limit=10
                 )
             else:
-                # Если канал не указан, используем старый метод с базой данных
+                
                 digest_result = await self.digest_generator.generate_weekly_digest(
                     channel=None,
                     days=days,
@@ -432,26 +432,26 @@ class BasicCommands:
             if not text:
                 return False
             
-            # Проверяем, является ли текст ссылкой на канал
+            
             channel_username = self._parse_channel_link(text)
             if not channel_username:
                 return False
             
             logger.info(f"📰 Получена ссылка на канал для дайджеста: {channel_username}")
             
-            # Генерируем дайджест для канала
+            
             await self.bot.send_message(f"📰 Читаем новости из @{channel_username}, подождите...")
             
-            # Используем сохраненный период из команды digest
+            
             days = getattr(self.bot, 'digest_days', 7)
             digest_result = await self.generate_digest_for_channel(channel_username, days)
             
-            # Обрабатываем результат с пагинацией
+            
             if isinstance(digest_result, dict):
-                # Новый формат с пагинацией - используем inline кнопки
+                
                 await self.bot.send_message_with_keyboard(digest_result['text'], digest_result['keyboard'], use_reply_keyboard=False)
             else:
-                # Старый формат (строка) - добавляем базовые кнопки как inline
+                
                 keyboard = [
                     [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
                     [{"text": "🏠 Главное меню", "callback_data": "start"}]
@@ -469,19 +469,19 @@ class BasicCommands:
         try:
             text = text.strip()
             
-            # https://t.me/channel_name
+            
             if text.startswith("https://t.me/"):
                 username = text.replace("https://t.me/", "")
-                # Убираем дополнительные параметры (?start=, /123 и т.д.)
+                
                 username = username.split("?")[0].split("/")[0]
                 return username if username and not username.startswith("+") else None
             
-            # @channel_name
+            
             elif text.startswith("@"):
                 username = text[1:]
                 return username if username else None
             
-            # channel_name (простое имя)
+            
             elif text.replace("_", "").replace("-", "").isalnum() and len(text) >= 3:
                 return text
             
@@ -523,7 +523,7 @@ class BasicCommands:
             await self.bot.send_message(response_text)
             return
 
-        self.bot.pending_topic_data = {  # type: ignore[attr-defined]
+        self.bot.pending_topic_data = {  
             "chat_title": chat_title,
             "chat_id": chat_id,
             "thread_id": thread_id,
@@ -573,7 +573,7 @@ class BasicCommands:
     async def _init_ai_chat(self):
         """Инициализация AI чата"""
         try:
-            await asyncio.sleep(5)  # Увеличиваем задержку для стабильности
+            await asyncio.sleep(5)  
             await self.ai_chat.initialize()
         except Exception as e:
             logger.error(f"❌ Ошибка инициализации AI чата: {e}")
@@ -610,7 +610,7 @@ class BasicCommands:
                 
             text = message['text'].strip()
             
-            # Проверяем, начинается ли сообщение с AI префикса
+            
             if (text.lower().startswith('ai:') or 
                 text.lower().startswith('ии:') or 
                 text.lower().startswith('аи:')):

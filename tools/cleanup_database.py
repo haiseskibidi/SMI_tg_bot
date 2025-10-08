@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 🧹 Утилита очистки базы данных
 Удаляет старые сообщения, дайджесты и хэши
@@ -11,7 +11,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Добавляем родительскую директорию в путь для импорта
+
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.database import DatabaseManager
@@ -28,7 +28,7 @@ async def cleanup_database(days_to_keep: int = 7, clear_all: bool = False):
     print(f"📅 Сохраняем данные за последние {days_to_keep} дней")
     
     try:
-        # Создаем менеджер базы данных
+        
         db_manager = DatabaseManager(db_path)
         await db_manager.initialize()
         
@@ -39,7 +39,7 @@ async def cleanup_database(days_to_keep: int = 7, clear_all: bool = False):
                 print("❌ Операция отменена")
                 return
             
-            # Очищаем все таблицы
+            
             with db_manager._get_connection() as conn:
                 tables = ['messages', 'sent_digests', 'processed_hashes', 'channel_checks', 'statistics']
                 for table in tables:
@@ -47,37 +47,37 @@ async def cleanup_database(days_to_keep: int = 7, clear_all: bool = False):
                     print(f"🗑️  Очищена таблица {table}: {result.rowcount} записей")
                 conn.commit()
                 
-                # Сжимаем базу
+                
                 conn.execute("VACUUM")
                 print("🗜️  База данных сжата")
         else:
-            # Частичная очистка старых данных
+            
             cutoff_date = datetime.now() - timedelta(days=days_to_keep)
             print(f"📅 Удаляем данные старше {cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}")
             
             with db_manager._get_connection() as conn:
-                # Удаляем старые сообщения
+                
                 result = conn.execute(
                     "DELETE FROM messages WHERE created_at < ?",
                     (cutoff_date,)
                 )
                 print(f"📰 Удалено старых сообщений: {result.rowcount}")
                 
-                # Удаляем старые дайджесты
+                
                 result = conn.execute(
                     "DELETE FROM sent_digests WHERE sent_at < ?",
                     (cutoff_date,)
                 )
                 print(f"📨 Удалено старых дайджестов: {result.rowcount}")
                 
-                # Удаляем старые хэши
+                
                 result = conn.execute(
                     "DELETE FROM processed_hashes WHERE first_seen < ?",
                     (cutoff_date,)
                 )
                 print(f"🔗 Удалено старых хэшей: {result.rowcount}")
                 
-                # Удаляем старые проверки каналов
+                
                 result = conn.execute(
                     "DELETE FROM channel_checks WHERE updated_at < ?",
                     (cutoff_date,)
@@ -86,11 +86,11 @@ async def cleanup_database(days_to_keep: int = 7, clear_all: bool = False):
                 
                 conn.commit()
                 
-                # Сжимаем базу
+                
                 conn.execute("VACUUM")
                 print("🗜️  База данных сжата")
         
-        # Показываем итоговую статистику
+        
         with db_manager._get_connection() as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM messages")
             messages_count = cursor.fetchone()[0]
@@ -102,7 +102,7 @@ async def cleanup_database(days_to_keep: int = 7, clear_all: bool = False):
             print(f"📰 Сообщений: {messages_count}")
             print(f"📨 Дайджестов: {digests_count}")
             
-            # Размер файла базы данных
+            
             db_size = os.path.getsize(db_path) / 1024 / 1024
             print(f"💾 Размер базы: {db_size:.2f} MB")
         
@@ -121,17 +121,17 @@ async def main():
     
     if len(sys.argv) > 1:
         if sys.argv[1] == "all":
-            # Полная очистка
+            
             await cleanup_database(clear_all=True)
         else:
-            # Частичная очистка с указанием дней
+            
             try:
                 days = int(sys.argv[1])
                 await cleanup_database(days_to_keep=days)
             except ValueError:
                 print("❌ Неверный параметр. Используйте число дней или 'all'")
     else:
-        # Интерактивный режим
+        
         print("Выберите режим очистки:")
         print("1. Удалить данные старше N дней")
         print("2. Полная очистка всех данных")

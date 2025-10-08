@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 📝 Ручное добавление новостей
 Безопасный способ добавить новости без мониторинга каналов
@@ -17,7 +17,7 @@ async def add_manual_news():
     print("📝 Ручное добавление новости")
     print("=" * 40)
     
-    # Загружаем конфигурацию
+    
     with open('../config/config.yaml', 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
@@ -29,7 +29,7 @@ async def add_manual_news():
         chat_id=config['bot']['chat_id']
     )
     
-    # Интерактивное добавление
+    
     print("\n💬 Введите данные новости:")
     
     title = input("📰 Заголовок: ").strip()
@@ -46,7 +46,7 @@ async def add_manual_news():
     region = input("🌍 Регион (sakhalin/kamchatka/other): ").strip() or "other"
     url = input("🔗 Ссылка (необязательно): ").strip()
     
-    # Создаем данные сообщения
+    
     now = datetime.now()
     message_data = {
         "id": f"manual_{int(now.timestamp())}",
@@ -62,19 +62,19 @@ async def add_manual_news():
         "message_id": int(now.timestamp()),
         "processed": True,
         "ai_suitable": True,
-        "selected_for_output": True,  # Всегда отбираем ручные новости
+        "selected_for_output": True,  
         "ai_analysis": f'{{"title": "{title}", "summary": "{text[:100]}...", "region": "{region}"}}',
-        "ai_score": 10,  # Максимальная оценка для ручных новостей
+        "ai_score": 10,  
         "ai_priority": "high",
         "content_hash": f"manual_{now.timestamp()}"
     }
     
     try:
-        # Сохраняем в базу
+        
         await db.save_message(message_data)
         print(f"\n✅ Новость добавлена: {title}")
         
-        # Отправляем уведомление
+        
         if await bot.test_connection():
             message = f"📰 **Новая новость добавлена**\n\n**{title}**\n\n{text}"
             if url:

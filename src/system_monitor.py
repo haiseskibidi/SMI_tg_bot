@@ -16,9 +16,9 @@ class SystemMonitor:
     
     def __init__(self, memory_limit_mb: int = 800):
         self.memory_limit_mb = memory_limit_mb
-        self.memory_limit_percent = 80  # 80% от доступной памяти
+        self.memory_limit_percent = 80  
         
-        # Счетчики предупреждений
+        
         self.memory_warnings = 0
         self.cpu_warnings = 0
         
@@ -100,7 +100,7 @@ class SystemMonitor:
             used_percent = memory_info.get('used_percent', 0)
             used_mb = memory_info.get('used_mb', 0)
             
-            # Проверяем лимиты
+            
             memory_critical = (
                 used_percent > self.memory_limit_percent or 
                 used_mb > self.memory_limit_mb
@@ -131,7 +131,7 @@ class SystemMonitor:
             
             cpu_percent = cpu_info.get('cpu_percent', 0)
             
-            # Проверяем высокую нагрузку на CPU
+            
             if cpu_percent > 90:
                 self.cpu_warnings += 1
                 logger.warning(f"⚠️ Высокая нагрузка на CPU: {cpu_percent}%")
@@ -154,7 +154,7 @@ class SystemMonitor:
             used_percent = disk_info.get('used_percent', 0)
             free_gb = disk_info.get('free_gb', 0)
             
-            # Проверяем критически мало места
+            
             if used_percent > 90 or free_gb < 1:
                 logger.warning(
                     f"⚠️ Мало места на диске: "
@@ -208,15 +208,15 @@ class SystemMonitor:
         
         while True:
             try:
-                # Проверяем все ресурсы
+                
                 memory_critical = self.check_memory_usage()
                 cpu_critical = self.check_cpu_usage()
                 disk_critical = self.check_disk_space()
                 
-                # Логируем статус
+                
                 self.log_system_status()
                 
-                # Если есть критические проблемы
+                
                 if memory_critical or cpu_critical or disk_critical:
                     logger.warning("⚠️ Обнаружены проблемы с ресурсами!")
                 
@@ -224,7 +224,7 @@ class SystemMonitor:
                 
             except Exception as e:
                 logger.error(f"❌ Ошибка в цикле мониторинга: {e}")
-                await asyncio.sleep(60)  # Пауза при ошибке
+                await asyncio.sleep(60)  
     
     def check_memory_limit(self) -> bool:
         """Проверить превышение лимита памяти"""
@@ -251,23 +251,23 @@ class SystemMonitor:
             cpu_info = self.get_cpu_usage()
             disk_info = self.get_disk_usage()
             
-            # Анализ памяти
+            
             if memory_info.get('used_percent', 0) > 70:
                 suggestions.append("🧹 Рекомендуется очистка кэша и неиспользуемых данных")
                 suggestions.append("📉 Снизить количество одновременно обрабатываемых каналов")
             
-            # Анализ CPU
+            
             if cpu_info.get('cpu_percent', 0) > 80:
                 suggestions.append("⏱️ Увеличить интервалы между запросами к API")
                 suggestions.append("🔄 Добавить больше пауз между операциями")
             
-            # Анализ диска
+            
             if disk_info.get('used_percent', 0) > 80:
                 suggestions.append("📁 Очистить старые логи и данные")
                 suggestions.append("🗃️ Настроить ротацию базы данных")
             
-            # Общие рекомендации для VPS 1GB
-            if memory_info.get('total_mb', 0) < 1200:  # Меньше 1.2GB
+            
+            if memory_info.get('total_mb', 0) < 1200:  
                 suggestions.extend([
                     "⚡ Использовать файловое кэширование вместо RAM",
                     "📦 Обрабатывать каналы меньшими пакетами",

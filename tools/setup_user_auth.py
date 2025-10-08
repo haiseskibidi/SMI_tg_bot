@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 🔐 Настройка пользовательской авторизации для мониторинга каналов
 ВАЖНО: Боты не могут читать каналы, нужен пользовательский аккаунт
@@ -19,17 +19,17 @@ async def setup_user_authentication():
     print("=" * 60)
     print()
     
-    # Загружаем переменные окружения
+    
     load_dotenv()
 
-    # Загружаем конфигурацию (абсолютный путь)
+    
     current_dir = Path(__file__).resolve().parent
     repo_root = current_dir.parent if (current_dir.parent / 'config').exists() else current_dir
     config_path = repo_root / 'config' / 'config.yaml'
 
     print(f"🔗 Путь к конфигурации: {config_path}")
 
-    # Получаем API ключи из переменных окружения
+    
     api_id = int(os.getenv('TELEGRAM_API_ID'))
     api_hash = os.getenv('TELEGRAM_API_HASH')
 
@@ -38,11 +38,11 @@ async def setup_user_authentication():
     print()
     
     try:
-        # По умолчанию НЕ удаляем сессию, чтобы не провоцировать повторные авторизации
-        # Включить очистку можно, установив RESET_TELETHON_SESSION=1 в окружении
+        
+        
         delete_sessions = str(os.getenv('RESET_TELETHON_SESSION', '0')).lower() in ('1', 'true', 'yes')
         if delete_sessions:
-            # Абсолютный путь к сессии
+            
             current_dir = Path(__file__).resolve().parent
             repo_root = current_dir.parent if (current_dir.parent / 'config').exists() else current_dir
             sessions_dir = repo_root / 'sessions'
@@ -56,9 +56,9 @@ async def setup_user_authentication():
         else:
             print("🔒 Сессия сохраняется: авто-удаление отключено (установите RESET_TELETHON_SESSION=1 для очистки)")
         
-        # Создаем клиент для пользователя (абсолютный путь к корню проекта)
+        
         current_dir = Path(__file__).resolve().parent
-        # Ищем корень проекта (где есть config/, src/, requirements.txt)
+        
         repo_root = current_dir.parent if (current_dir.parent / 'config').exists() else current_dir
         sessions_dir = repo_root / 'sessions'
         sessions_dir.mkdir(exist_ok=True)
@@ -71,10 +71,10 @@ async def setup_user_authentication():
         print("💡 ВАЖНО: Вводите НОМЕР ТЕЛЕФОНА, а НЕ bot token!")
         print()
         
-        # Запускаем авторизацию
+        
         await client.start()
         
-        # Проверяем результат
+        
         me = await client.get_me()
         
         if hasattr(me, 'phone') and me.phone:
@@ -83,7 +83,7 @@ async def setup_user_authentication():
             print(f"📞 Телефон: {me.phone}")
             print()
             
-            # Тестируем доступ к каналу SMIzametki
+            
             test_channel = "@SMIzametki"
             print(f"🔍 Тестируем доступ к каналу {test_channel}...")
             
@@ -91,7 +91,7 @@ async def setup_user_authentication():
                 entity = await client.get_entity(test_channel)
                 print(f"✅ Канал найден: {entity.title}")
                 
-                # Получаем последние сообщения
+                
                 count = 0
                 async for message in client.iter_messages(entity, limit=3):
                     if message.text:

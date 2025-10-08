@@ -17,7 +17,7 @@ class DigestGenerator:
         self.db = database_manager
         self.telegram_monitor = telegram_monitor
         self.vladivostok_tz = pytz.timezone("Asia/Vladivostok")
-        self._last_digest_data = None  # Для хранения данных пагинации
+        self._last_digest_data = None  
     
     async def generate_weekly_digest(
         self, 
@@ -40,7 +40,7 @@ class DigestGenerator:
             custom_end_date: Конечная дата в формате 'YYYY-MM-DD'
         """
         try:
-            # Определяем период
+            
             if custom_start_date and custom_end_date:
                 start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
                 end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
@@ -48,11 +48,11 @@ class DigestGenerator:
                 end_date = datetime.now(self.vladivostok_tz)
                 start_date = end_date - timedelta(days=days)
             
-            # Форматируем даты для отображения
+            
             start_formatted = start_date.strftime('%d.%m.%Y')
             end_formatted = end_date.strftime('%d.%m.%Y')
             
-            # Получаем топ новости
+            
             top_news = await self.db.get_top_news_for_period(
                 start_date=start_date,
                 end_date=end_date,
@@ -64,7 +64,7 @@ class DigestGenerator:
             if not top_news:
                 return self._generate_empty_digest(start_formatted, end_formatted, region, channel)
             
-            # Генерируем текст дайджеста
+            
             digest_text = self._format_digest(
                 top_news, 
                 start_formatted, 
@@ -90,7 +90,7 @@ class DigestGenerator:
     ) -> str:
         """Форматирование дайджеста в нужный вид"""
         
-        # Заголовок
+        
         if channel:
             channel_text = f" из канала @{channel}"
             header = f"📰 Собрали топ самых обсуждаемых новостей{channel_text} за неделю\n"
@@ -102,33 +102,33 @@ class DigestGenerator:
         
         header += f"📅 Период: {start_date} - {end_date}\n\n"
         
-        # Новости
+        
         news_items = []
         for news in news_list:
-            # Формируем ссылку на сообщение
+            
             link = self._create_message_link(news)
             
-            # Ограничиваем длину заголовка
+            
             title = news.get('text', 'Без заголовка')[:100]
             if len(title) == 100:
                 title += "..."
             
-            # Статистика
+            
             views = news.get('views', 0)
             forwards = news.get('forwards', 0)
-            popularity = views + forwards * 2  # Пересылки важнее просмотров
+            popularity = views + forwards * 2  
             
             news_item = f"⚡️ {title}"
             if link:
                 news_item += f" ({link})"
             
-            # Добавляем статистику если есть
+            
             if popularity > 0:
                 news_item += f" [{popularity} реакций]"
             
             news_items.append(news_item)
         
-        # Заключение
+        
         footer = "\n\nЭти новости собрали больше всего реакций и комментариев от наших читателей. А вам что больше всего запомнилось?"
         
         return header + "\n".join(news_items) + footer
@@ -142,7 +142,7 @@ class DigestGenerator:
             if not channel_username or not message_id:
                 return None
             
-            # Убираем @ если есть
+            
             if channel_username.startswith('@'):
                 channel_username = channel_username[1:]
             
@@ -223,21 +223,21 @@ class DigestGenerator:
                 logger.error("❌ Telegram monitor или client недоступен")
                 return "❌ Не удалось подключиться к Telegram для чтения канала"
 
-            # Определяем период (с учетом timezone)
+            
             if custom_start_date and custom_end_date:
                 start_date = datetime.strptime(custom_start_date, '%Y-%m-%d')
                 end_date = datetime.strptime(custom_end_date, '%Y-%m-%d')
-                # Добавляем timezone для корректного сравнения
+                
                 start_date = self.vladivostok_tz.localize(start_date)
                 end_date = self.vladivostok_tz.localize(end_date.replace(hour=23, minute=59, second=59))
             else:
-                # Правильная логика: полные дни
+                
                 end_date = datetime.now(self.vladivostok_tz).replace(hour=23, minute=59, second=59, microsecond=0)
                 start_date = (end_date - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
             
             logger.info(f"📰 Читаем сообщения из @{channel_username} за период {start_date.date()} - {end_date.date()}")
 
-            # Получаем entity канала
+            
             try:
                 if channel_username.startswith('@'):
                     channel_username = channel_username[1:]
@@ -248,7 +248,7 @@ class DigestGenerator:
                 logger.error(f"❌ Не удалось получить канал @{channel_username}: {e}")
                 return f"❌ Канал @{channel_username} не найден или недоступен"
 
-            # Читаем сообщения
+            
             messages = []
             total_messages_checked = 0
             
@@ -256,48 +256,48 @@ class DigestGenerator:
             
             async for message in self.telegram_monitor.client.iter_messages(
                 entity, 
-                limit=None  # Проверяем ВСЕ сообщения
+                limit=None  
             ):
                 total_messages_checked += 1
                 
-                if total_messages_checked <= 5:  # Логируем первые 5 сообщений для отладки
-                    logger.info(f"📄 Сообщение #{total_messages_checked}: дата={message.date}, текст='{message.text[:30] if message.text else 'НЕТ ТЕКСТА'}'")
+                if total_messages_checked <= 5:  
+                    logger.info(f"📄 Сообщение 
                 
-                # Конвертируем дату сообщения в нужный timezone для корректного сравнения
+                
                 message_date = message.date
                 if message_date.tzinfo is None:
-                    # Если дата без timezone, считаем что это UTC
+                    
                     message_date = pytz.UTC.localize(message_date)
                 
-                # Конвертируем в наш timezone для сравнения
+                
                 message_date = message_date.astimezone(self.vladivostok_tz)
                 
-                # Фильтруем по дате
+                
                 if message_date < start_date or message_date > end_date:
-                    if total_messages_checked <= 5:  # Логируем причины фильтрации для первых сообщений
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано по дате: {message_date} не в периоде {start_date} - {end_date}")
+                    if total_messages_checked <= 5:  
+                        logger.info(f"⏭️ Сообщение 
                     continue
                     
-                # Пропускаем сообщения без текста
+                
                 if not message.text or len(message.text.strip()) < 10:
                     if total_messages_checked <= 5:
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: нет текста или слишком короткое")
+                        logger.info(f"⏭️ Сообщение 
                     continue
                 
-                # Исключаем "ночной чат" и подобные посты
+                
                 text_lower = message.text.lower()
                 if self._is_chat_message(text_lower):
                     if total_messages_checked <= 10:
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: ночной чат/общение")
+                        logger.info(f"⏭️ Сообщение 
                     continue
 
-                # Исключаем политические посты
-                if "#политика" in text_lower or "#политик" in text_lower:
+                
+                if "
                     if total_messages_checked <= 10:
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: политика")
+                        logger.info(f"⏭️ Сообщение 
                     continue
                 
-                # Подсчитываем активность (реакции + комментарии)
+                
                 views = getattr(message, 'views', 0) or 0
                 forwards = getattr(message, 'forwards', 0) or 0
                 replies = getattr(message.replies, 'replies', 0) if message.replies else 0
@@ -307,30 +307,30 @@ class DigestGenerator:
                     for reaction in message.reactions.results:
                         reactions_count += reaction.count
                 
-                # Ослабленный фильтр активности: либо много просмотров, либо есть реакции/комментарии
+                
                 engagement = replies + reactions_count
-                if engagement == 0 and views < 1000:  # Разрешаем посты с большими просмотрами
+                if engagement == 0 and views < 1000:  
                     if total_messages_checked <= 10:
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано: мало активности (views={views}, replies={replies}, reactions={reactions_count})")
+                        logger.info(f"⏭️ Сообщение 
                     continue
                 
-                # Проверка тега канала (бонус к популярности, но не обязательно)
+                
                 channel_tag = f"@{channel_username}"
                 has_channel_tag = channel_tag in text_lower
 
-                # Региональная проверка (бонус к популярности, но не обязательно)
+                
                 regional_keywords = self._get_regional_keywords(channel_username)
                 is_regional_news = False
                 if regional_keywords:
                     is_regional_news = any(keyword in text_lower for keyword in regional_keywords)
                 
-                logger.info(f"✅ Сообщение #{total_messages_checked} подходит! Дата: {message_date}, реакции: {reactions_count}, комментарии: {replies}, текст: '{message.text[:50]}'")
+                logger.info(f"✅ Сообщение 
                 
-                # Собираем данные о сообщении (используем уже вычисленные значения)
+                
                 message_data = {
                     'id': message.id,
                     'text': message.text,
-                    'date': message_date,  # Используем уже сконвертированную дату
+                    'date': message_date,  
                     'views': views,
                     'forwards': forwards,
                     'replies': replies,
@@ -338,23 +338,23 @@ class DigestGenerator:
                     'url': f"https://t.me/{channel_username}/{message.id}"
                 }
                 
-                # Вычисляем популярность (акцент на реакции и комментарии)
+                
                 popularity_base = (
-                    message_data['replies'] * 10 +      # Комментарии - самое важное
-                    message_data['reactions_count'] * 8 + # Реакции - очень важно
-                    message_data['forwards'] * 3 +       # Репосты - важно
-                    message_data['views'] * 0.1          # Просмотры - минимальный вес
+                    message_data['replies'] * 10 +      
+                    message_data['reactions_count'] * 8 + 
+                    message_data['forwards'] * 3 +       
+                    message_data['views'] * 0.1          
                 )
                 
-                # Бонусы за качество контента
-                channel_tag_bonus = 1.5 if has_channel_tag else 1.0    # +50% за тег канала
-                regional_bonus = 1.3 if is_regional_news else 1.0       # +30% за региональность
+                
+                channel_tag_bonus = 1.5 if has_channel_tag else 1.0    
+                regional_bonus = 1.3 if is_regional_news else 1.0       
                 
                 message_data['popularity_score'] = popularity_base * channel_tag_bonus * regional_bonus
                 
                 messages.append(message_data)
                 
-                # Если дошли до начала периода
+                
                 if message_date < start_date:
                     break
 
@@ -364,10 +364,10 @@ class DigestGenerator:
                 empty_digest = self._generate_empty_digest_for_channel(channel_username, start_date, end_date)
                 return empty_digest
             
-            # Сортируем по популярности и берем топ-30 для пагинации
+            
             all_top_messages = sorted(messages, key=lambda x: x['popularity_score'], reverse=True)[:30]
             
-            # Сохраняем данные для пагинации (временное решение)
+            
             self._last_digest_data = {
                 'messages': all_top_messages,
                 'start_date': start_date.strftime('%d.%m.%Y'),
@@ -375,17 +375,17 @@ class DigestGenerator:
                 'channel_username': channel_username
             }
             
-            # Форматируем результат с пагинацией
+            
             digest_result = self._format_live_digest_with_pagination(
                 all_top_messages, 
                 start_date.strftime('%d.%m.%Y'),
                 end_date.strftime('%d.%m.%Y'),
                 channel_username,
-                page=1,  # Показываем первую страницу (1-10)
+                page=1,  
                 limit=limit
             )
             
-            # Возвращаем только текст для совместимости (кнопки обработаем отдельно)
+            
             return digest_result
             
         except Exception as e:
@@ -405,17 +405,17 @@ class DigestGenerator:
         
         digest_lines = []
         for i, msg in enumerate(messages, 1):
-            # Очищаем текст от форматирования и лишних эмодзи
+            
             clean_text = self._clean_message_text(msg['text'])
             
-            # Умная обрезка по словам (максимум 80 символов)
+            
             text_preview = self._smart_truncate(clean_text, 80)
             
-            # Детальная статистика активности
+            
             reactions = msg['reactions_count']
             replies = msg['replies']
             
-            # Формируем строку активности
+            
             activity_parts = []
             if reactions > 0:
                 activity_parts.append(f"👍{reactions}")
@@ -442,12 +442,12 @@ class DigestGenerator:
     ) -> Dict[str, Any]:
         """Форматирование дайджеста для канала с пагинацией"""
         
-        # Вычисляем границы для текущей страницы
+        
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
         messages_on_page = all_messages[start_idx:end_idx]
         
-        # Заголовок с информацией о странице
+        
         total_messages = len(all_messages)
         if page == 1:
             header = f"📰 Топ-{len(messages_on_page)} самых обсуждаемых новостей из канала @{channel_username} за неделю\n"
@@ -457,20 +457,20 @@ class DigestGenerator:
         
         header += f"📅 Период: {start_date} - {end_date}\n\n"
         
-        # Форматируем новости на текущей странице
+        
         digest_lines = []
         for i, msg in enumerate(messages_on_page, start_idx + 1):
-            # Очищаем текст от форматирования и лишних эмодзи
+            
             clean_text = self._clean_message_text(msg['text'])
             
-            # Умная обрезка по словам (максимум 80 символов)
+            
             text_preview = self._smart_truncate(clean_text, 80)
             
-            # Детальная статистика активности
+            
             reactions = msg['reactions_count']
             replies = msg['replies']
             
-            # Формируем строку активности
+            
             activity_parts = []
             if reactions > 0:
                 activity_parts.append(f"👍{reactions}")
@@ -482,10 +482,10 @@ class DigestGenerator:
             line = f"{i}. {text_preview}\n   🔗 {msg['url']} [{activity_str}]"
             digest_lines.append(line)
         
-        # Создаем кнопки пагинации
+        
         pagination_buttons = []
         
-        # Кнопка "Показать еще" только если есть следующие страницы
+        
         if page == 1 and total_messages > 10:
             pagination_buttons.append([
                 {"text": f"📄 Показать еще (11-{min(20, total_messages)})", 
@@ -497,7 +497,7 @@ class DigestGenerator:
                  "callback_data": f"digest_page_{channel_username}_{page + 1}"}
             ])
         
-        # Кнопка "Назад" если не первая страница
+        
         if page > 1:
             if page == 2:
                 pagination_buttons.append([
@@ -510,7 +510,7 @@ class DigestGenerator:
                      "callback_data": f"digest_page_{channel_username}_{page - 1}"}
                 ])
         
-        # Основные кнопки
+        
         main_buttons = [
             [{"text": "📰 Новый дайджест", "callback_data": "digest"}],
             [{"text": "🏠 Главное меню", "callback_data": "start"}]
@@ -521,11 +521,11 @@ class DigestGenerator:
         text = header + "\n\n".join(digest_lines) + footer
         keyboard = pagination_buttons + main_buttons
         
-        # Возвращаем и текст и клавиатуру
+        
         return {
             'text': text,
             'keyboard': keyboard,
-            'all_messages': all_messages,  # Сохраняем для других страниц
+            'all_messages': all_messages,  
             'channel_username': channel_username,
             'start_date': start_date,
             'end_date': end_date
@@ -552,7 +552,7 @@ class DigestGenerator:
         """Получить ключевые слова для региональной фильтрации по каналу"""
         channel_lower = channel_username.lower()
         
-        # Камчатка
+        
         if "kamchat" in channel_lower or "камчат" in channel_lower:
             return [
                 "камчатк", "петропавловск", "елизово", "мильково", "усть-большерецк", 
@@ -560,92 +560,92 @@ class DigestGenerator:
                 "командорск", "никольское", "тигиль", "оссора", "пенжино"
             ]
         
-        # Владивосток
+        
         elif "vladivostok" in channel_lower or "владивосток" in channel_lower:
             return [
                 "владивосток", "приморск", "находка", "уссурийск", "артем", 
                 "партизанск", "спасск", "дальнегорск", "лесозаводск", "арсеньев"
             ]
         
-        # Хабаровск
+        
         elif "khabarovsk" in channel_lower or "хабаровск" in channel_lower:
             return [
                 "хабаровск", "комсомольск", "амурск", "николаевск", "советская гавань",
                 "бикин", "вяземский", "охотск", "аян"
             ]
         
-        # Благовещенск
+        
         elif "blagoveshchensk" in channel_lower or "благовещенск" in channel_lower:
             return [
                 "благовещенск", "белогорск", "свободный", "зея", "тында", 
                 "шимановск", "завитинск", "райчихинск"
             ]
         
-        # Сахалин
+        
         elif "sakhalin" in channel_lower or "сахалин" in channel_lower:
             return [
                 "сахалин", "южно-сахалинск", "холмск", "корсаков", "невельск",
                 "александровск", "поронайск", "макаров", "курилы", "оха"
             ]
         
-        # Якутск
+        
         elif "yakutsk" in channel_lower or "якутск" in channel_lower:
             return [
                 "якутск", "якути", "саха", "мирный", "нерюнгри", "алдан", 
                 "ленск", "олекминск", "верхоянск", "магадан"
             ]
         
-        # Иркутск
+        
         elif "irkutsk" in channel_lower or "иркутск" in channel_lower:
             return [
                 "иркутск", "ангарск", "братск", "усть-илимск", "черемхово",
                 "саянск", "шелехов", "тулун", "байкал"
             ]
         
-        # Улан-Удэ
+        
         elif "ulan" in channel_lower or "улан" in channel_lower or "buryat" in channel_lower:
             return [
                 "улан-удэ", "бурят", "северобайкальск", "гусиноозерск", 
                 "закаменск", "кяхта", "баргузин", "турунтаево"
             ]
         
-        # Чита
+        
         elif "chita" in channel_lower or "чита" in channel_lower:
             return [
                 "чита", "краснокаменск", "борзя", "петровск", "нерчинск",
                 "шилка", "сретенск", "балей"
             ]
         
-        # Если канал не определен, не фильтруем по региону
+        
         return []
 
     def _is_chat_message(self, text_lower: str) -> bool:
         """Проверка, является ли сообщение обычным общением (не новостью)"""
         chat_keywords = [
-            # Ночной чат
+            
             "ночной чат", "night chat", "доброй ночи", "спокойной ночи", 
             "всем сладких снов", "приятных снов",
             
-            # Утренние приветствия
+            
             "доброе утро", "с добрым утром", "всем доброго утра",
             
-            # Общие приветствия
+            
             "всем привет", "привет всем", "добрый день", "добрый вечер",
             
-            # Вопросы/общение
+            
             "как дела", "что нового", "как погода", "кто онлайн",
             
-            # Служебные сообщения
+            
             "опрос:", "голосование:", "вопрос дня", "обсуждение:",
             
-            # Эмодзи-сообщения (только эмодзи)
+            
         ]
         
-        # Проверяем наличие ключевых слов чата
+        
         if any(keyword in text_lower for keyword in chat_keywords):
             return True
         
-        # Проверяем, состоит ли сообщение только из эмодзи и коротких слов
+        
         words = text_lower.split()
         if len(words) <= 3 and all(len(word) <= 4 for word in words):
             return True
@@ -654,16 +654,16 @@ class DigestGenerator:
 
     def _clean_message_text(self, text: str) -> str:
         """Очистка текста сообщения от форматирования и лишних символов"""
-        # Убираем markdown форматирование
+        
         text = text.replace('**', '').replace('__', '').replace('*', '').replace('_', '')
         
-        # Убираем повторяющиеся эмодзи в начале строки
+        
         text = re.sub(r'^(\s*[^\w\s]+\s*){2,}', '', text)
         
-        # Убираем лишние пробелы и переносы строк
+        
         text = ' '.join(text.split())
         
-        # Убираем упоминания каналов из текста (они уже есть в статистике)
+        
         text = re.sub(r'@\w+', '', text)
         
         return text.strip()
@@ -673,12 +673,12 @@ class DigestGenerator:
         if len(text) <= max_length:
             return text
         
-        # Обрезаем по словам
+        
         words = text.split()
         result = ""
         
         for word in words:
-            if len(result + " " + word) <= max_length - 3:  # -3 для "..."
+            if len(result + " " + word) <= max_length - 3:  
                 if result:
                     result += " "
                 result += word
@@ -690,7 +690,7 @@ class DigestGenerator:
     async def get_digest_page(self, channel_username: str, page: int) -> Dict[str, Any]:
         """Получить конкретную страницу дайджеста"""
         try:
-            # Проверяем, есть ли сохраненные данные
+            
             if not hasattr(self, '_last_digest_data') or not self._last_digest_data:
                 return {
                     'text': "❌ Данные дайджеста не найдены. Сгенерируйте новый дайджест.",
@@ -699,14 +699,14 @@ class DigestGenerator:
             
             data = self._last_digest_data
             
-            # Проверяем, тот ли канал
+            
             if data['channel_username'] != channel_username:
                 return {
                     'text': "❌ Данные дайджеста устарели. Сгенерируйте новый дайджест.",
                     'keyboard': [[{"text": "📰 Новый дайджест", "callback_data": "digest"}]]
                 }
             
-            # Форматируем нужную страницу
+            
             return self._format_live_digest_with_pagination(
                 data['messages'],
                 data['start_date'],

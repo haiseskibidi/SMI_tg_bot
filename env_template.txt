@@ -1,4 +1,4 @@
-# Скопируйте содержимое в файл .env и заполните своими данными
+
 BOT_TOKEN=your_bot_token_here
 BOT_CHAT_ID=your_admin_chat_id_here
 BOT_GROUP_CHAT_ID=your_group_chat_id_here

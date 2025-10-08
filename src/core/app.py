@@ -11,7 +11,7 @@ from .config_loader import ConfigLoader
 from .lifecycle import LifecycleManager
 from ..monitoring import SubscriptionCacheManager, ChannelMonitor, MessageProcessor
 
-# AI модули (опционально)
+
 try:
     from ..ai.urgency_detector import initialize_urgency_detector
     AI_AVAILABLE = True
@@ -26,23 +26,23 @@ class NewsMonitorWithBot:
         self.running = False
         self.monitoring_active = True
         
-        # Модули системы
+        
         self.config_loader = ConfigLoader(config_path)
         self.lifecycle_manager = LifecycleManager(self.config_loader)
         self.subscription_cache = SubscriptionCacheManager()
         
-        # Компоненты (будут инициализированы через lifecycle_manager)
+        
         self.database = None
         self.telegram_monitor = None
         self.telegram_bot = None
         self.news_processor = None
         self.system_monitor = None
         
-        # Мониторинг
+        
         self.message_processor = None
         self.channel_monitor = None
         
-        # Кэш медиа групп
+        
         self.processed_media_groups: Set[int] = set()
 
     async def pause_monitoring(self):
@@ -50,11 +50,11 @@ class NewsMonitorWithBot:
         try:
             self.monitoring_active = False
             
-            # Останавливаем реальные процессы мониторинга
+            
             if self.channel_monitor and hasattr(self.channel_monitor, 'stop_monitoring'):
                 await self.channel_monitor.stop_monitoring()
             
-            # Отключаем Telegram клиент от получения сообщений  
+            
             if self.telegram_monitor and hasattr(self.telegram_monitor, 'pause_handlers'):
                 await self.telegram_monitor.pause_handlers()
             
@@ -68,15 +68,15 @@ class NewsMonitorWithBot:
         try:
             self.monitoring_active = True
             
-            # Возобновляем процессы мониторинга
+            
             if self.channel_monitor and hasattr(self.channel_monitor, 'start_monitoring'):
                 await self.channel_monitor.start_monitoring()
             
-            # Возобновляем получение сообщений из каналов
+            
             if self.telegram_monitor and hasattr(self.telegram_monitor, 'resume_handlers'):
                 await self.telegram_monitor.resume_handlers()
             elif self.channel_monitor:
-                # Пересоздаем подписки если методы resume не существуют
+                
                 await self.channel_monitor.setup_realtime_handlers()
             
             logger.info("▶️ Мониторинг полностью возобновлен")
@@ -91,13 +91,13 @@ class NewsMonitorWithBot:
         if not text:
             return ""
         
-        # Убираем markdown символы, оставляем только текст
-        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # **text** -> text
-        text = re.sub(r'\*(.*?)\*', r'\1', text)      # *text* -> text  
-        text = re.sub(r'__(.*?)__', r'\1', text)      # __text__ -> text
-        text = re.sub(r'~~(.*?)~~', r'\1', text)      # ~~text~~ -> text
-        text = re.sub(r'`(.*?)`', r'\1', text)        # `text` -> text
-        text = re.sub(r'```(.*?)```', r'\1', text, flags=re.DOTALL)  # ```text``` -> text
+        
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  
+        text = re.sub(r'\*(.*?)\*', r'\1', text)      
+        text = re.sub(r'__(.*?)__', r'\1', text)      
+        text = re.sub(r'~~(.*?)~~', r'\1', text)      
+        text = re.sub(r'`(.*?)`', r'\1', text)        
+        text = re.sub(r'```(.*?)```', r'\1', text, flags=re.DOTALL)  
         
         return text
 
@@ -136,7 +136,7 @@ class NewsMonitorWithBot:
     def get_channel_regions(self, channel_username: str) -> list:
         found_regions = []
         
-        # ПРИОРИТЕТ 1: Проверяем channels_config.yaml (явные настройки)
+        
         try:
             import yaml
             with open('config/channels_config.yaml', 'r', encoding='utf-8') as f:
@@ -149,11 +149,11 @@ class NewsMonitorWithBot:
                         if channel.get('username') == channel_username:
                             found_regions.append(region_key)
                             logger.debug(f"📍 Канал @{channel_username} найден в channels_config.yaml → {region_key}")
-                            return found_regions  # Возвращаем сразу, не ищем дальше
+                            return found_regions  
         except Exception as e:
             logger.warning(f"⚠️ Ошибка чтения channels_config.yaml: {e}")
         
-        # ПРИОРИТЕТ 2: Если не найден в явных настройках, ищем по ключевым словам
+        
         regions_config = self.config_loader.get_regions_config()
         for region_key, region_data in regions_config.items():
             keywords = region_data.get('keywords', [])
@@ -163,7 +163,7 @@ class NewsMonitorWithBot:
                     logger.debug(f"📍 Канал @{channel_username} найден по ключевому слову '{keyword}' → {region_key}")
                     break
         
-        # FALLBACK: Если нигде не найден
+        
         if not found_regions:
             found_regions.append('general')
             logger.debug(f"📍 Канал @{channel_username} не найден → general")
@@ -239,29 +239,29 @@ class NewsMonitorWithBot:
         if not success:
             return False
         
-        # Копируем компоненты из lifecycle_manager
+        
         self.database = self.lifecycle_manager.database
         self.telegram_monitor = self.lifecycle_manager.telegram_monitor
         self.telegram_bot = self.lifecycle_manager.telegram_bot
         self.news_processor = self.lifecycle_manager.news_processor
         self.system_monitor = self.lifecycle_manager.system_monitor
         
-        # ВАЖНО: Устанавливаем ссылку на monitor_bot для дайджестов
+        
         if self.telegram_bot:
             self.telegram_bot.monitor_bot = self
             logger.info("✅ Monitor bot установлен в Telegram бота")
         
-        # Инициализируем мониторинг компоненты
+        
         if self.telegram_monitor:
             self.message_processor = MessageProcessor(self.database, self)
             self.channel_monitor = ChannelMonitor(
                 self.telegram_monitor,
                 self.subscription_cache,
                 self.message_processor,
-                self.config_loader  # Передаем config_loader для загрузки настроек таймаутов
+                self.config_loader  
             )
         
-        # 🤖 Инициализируем AI модули (если доступны)
+        
         if AI_AVAILABLE:
             try:
                 logger.info("🤖 Инициализация AI модулей...")
@@ -566,7 +566,7 @@ class NewsMonitorWithBot:
                 messages_to_process = sorted(group_messages, key=lambda x: x.id)
                 logger.info(f"📦 Найдено {len(messages_to_process)} медиа в группе")
                 
-                # Проверяем, есть ли уже обработанный AI текст
+                
                 ai_processed_text = news.get('text')
                 
                 for msg in messages_to_process:

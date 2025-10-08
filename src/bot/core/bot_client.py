@@ -79,7 +79,7 @@ class TelegramBot:
             "manage_channels": self.management_commands.manage_channels,
             "stats": self.management_commands.stats,
             "force_subscribe": self.channel_commands.force_subscribe,
-            # AI команды
+            
             "ask": self.basic_commands.ask_ai,
             "ai_info": self.basic_commands.ai_info,
             "clear_ai": self.basic_commands.clear_ai_history,
@@ -168,7 +168,7 @@ class TelegramBot:
                 target_chat_id = self.admin_chat_id
                 logger.info(f"📤 Группа не настроена, отправляем админу: {self.admin_chat_id}")
             
-            # Если нужен message_id, возвращаем полные данные сообщения
+            
             return await self._send_to_single_user(text, target_chat_id, parse_mode, return_message_data=bool(chat_id))
                 
         except Exception as e:

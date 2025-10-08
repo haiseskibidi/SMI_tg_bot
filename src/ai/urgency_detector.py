@@ -23,7 +23,7 @@ class UrgencyDetector:
                 'землетрясение', 'наводнение', 'цунами', 'ураган', 'штorm',
                 'чп', 'чрезвычайная ситуация', 'экстренно', 'срочно', 'alarm',
                 'breaking', 'urgent', 'emergency', 'disaster', 'crash', 'explosion',
-                # ДТП и транспорт
+                
                 'дтп', 'влетел', 'влетела', 'столкновение', 'лобовое', 'фура', 'грузовик',
                 'переворот авто', 'сбил пешехода', 'наезд', 'столкнулись'
             ],
@@ -52,10 +52,10 @@ class UrgencyDetector:
         try:
             logger.info("🤖 Подключение к Ollama AI для анализа срочности...")
             
-            # Создаем HTTP клиент с увеличенным timeout
-            self.ollama_client = httpx.AsyncClient(timeout=60.0)  # Увеличили до 60 секунд
             
-            # Проверяем доступность Ollama сервера
+            self.ollama_client = httpx.AsyncClient(timeout=60.0)  
+            
+            
             response = await self.ollama_client.get(f"{self.ollama_url}/api/tags")
             if response.status_code != 200:
                 raise Exception(f"Ollama сервер недоступен: {response.status_code}")
@@ -67,7 +67,7 @@ class UrgencyDetector:
                 logger.warning(f"⚠️ Модель {self.model_name} не найдена. Доступные: {model_names}")
                 logger.info(f"🔄 Попытка загрузки модели {self.model_name}...")
                 
-                # Пытаемся загрузить модель
+                
                 pull_response = await self.ollama_client.post(
                     f"{self.ollama_url}/api/pull", 
                     json={"name": self.model_name}
@@ -78,7 +78,7 @@ class UrgencyDetector:
                 
                 logger.info("✅ Модель успешно загружена")
             
-            # Тестовый запрос для проверки работоспособности
+            
             test_response = await self._make_ollama_request("Тест")
             if not test_response:
                 raise Exception("Тестовый запрос к модели не прошел")
@@ -152,12 +152,12 @@ class UrgencyDetector:
         if not keywords:
             return 0.0, []
             
-        # Весовые коэффициенты для разных категорий
+        
         weights = {
-            'emergency': 1.0,      # Максимальная срочность
-            'crime_urgent': 0.8,   # Высокая срочность
-            'politics_urgent': 0.6, # Средняя срочность
-            'economy_urgent': 0.4   # Низкая срочность
+            'emergency': 1.0,      
+            'crime_urgent': 0.8,   
+            'politics_urgent': 0.6, 
+            'economy_urgent': 0.4   
         }
         
         total_score = 0.0
@@ -165,7 +165,7 @@ class UrgencyDetector:
             category = keyword.split(':')[0]
             total_score += weights.get(category, 0.2)
             
-        # Нормализуем счет (максимум 1.0)
+        
         urgency_score = min(total_score / 2, 1.0)
         
         return urgency_score, keywords
@@ -212,7 +212,7 @@ class UrgencyDetector:
             if not response:
                 return {'scores': [], 'ai_available': False}
             
-            # Парсим ответ
+            
             response_lower = response.lower().strip()
             if "игнорировать" in response_lower or "игнор" in response_lower:
                 urgency_level = "ignore"
@@ -258,7 +258,7 @@ class UrgencyDetector:
             if not response:
                 return {'sentiment': 'neutral', 'confidence': 0.5, 'ai_available': False}
             
-            # Парсим ответ
+            
             response_lower = response.lower().strip()
             if "негативн" in response_lower:
                 sentiment = "negative"
@@ -287,7 +287,7 @@ class UrgencyDetector:
             r'\b(только что|сейчас|прямо сейчас|в эту минуту)\b',
             r'\b(breaking|срочно|экстренно|внимание)\b',
             r'\b(just now|right now|urgent|breaking news)\b',
-            r'\b\d{1,2}:\d{2}\b',  # Время вида 15:30
+            r'\b\d{1,2}:\d{2}\b',  
         ]
         
         score = 0.0
@@ -314,56 +314,56 @@ class UrgencyDetector:
             }
         """
         try:
-            # 1. Базовый анализ по ключевым словам
+            
             keyword_score, keywords = self._calculate_keyword_urgency(news_text)
             
-            # 2. AI классификация (если доступна)
+            
             ai_result = await self._ai_classify_urgency(news_text)
             
-            # 3. Анализ тональности
+            
             sentiment = await self._analyze_sentiment(news_text)
             
-            # 4. Временные маркеры
+            
             time_score = self._detect_time_markers(news_text)
             
-            # 5. AI-приоритетный расчет
-            ai_level = None  # По умолчанию
+            
+            ai_level = None  
             
             if ai_result['ai_available'] and ai_result['labels']:
-                # AI - главный судья!
+                
                 ai_level = ai_result['labels'][0]
                 ai_score = ai_result['scores'][0]
                 
-                # Базируемся на AI решении
+                
                 if ai_level == 'ignore':
-                    # AI определил как спам/рекламу - возвращаем специальный статус
+                    
                     final_score = 0.0
                     urgency_level = 'ignore'
                     emoji = '🚫'
                 elif ai_level == 'urgent':
-                    final_score = max(0.8, ai_score)  # Минимум 0.8 для срочного
+                    final_score = max(0.8, ai_score)  
                     urgency_level = 'urgent'
                     emoji = '🔴'
                 elif ai_level == 'important':
-                    final_score = max(0.5, min(ai_score, 0.7))  # 0.5-0.7 для важного
+                    final_score = max(0.5, min(ai_score, 0.7))  
                     urgency_level = 'important'
                     emoji = '🟡'
                 else:
-                    final_score = min(ai_score, 0.4)  # Максимум 0.4 для обычного
+                    final_score = min(ai_score, 0.4)  
                     urgency_level = 'normal'
                     emoji = '⚪'
                 
-                # Ключевые слова только корректируют AI решение
+                
                 if keywords:
-                    keyword_bonus = min(keyword_score * 0.2, 0.15)  # Максимум +15%
+                    keyword_bonus = min(keyword_score * 0.2, 0.15)  
                     final_score = min(final_score + keyword_bonus, 1.0)
                 
-                # Временные маркеры усиливают срочность
+                
                 if time_score > 0 and urgency_level in ['urgent', 'important']:
                     final_score = min(final_score + time_score * 0.1, 1.0)
                 
             else:
-                # Fallback на ключевые слова если AI недоступен
+                
                 final_score = keyword_score + time_score * 0.3
                 final_score = min(final_score, 1.0)
                 
@@ -377,7 +377,7 @@ class UrgencyDetector:
                     urgency_level = 'normal'
                     emoji = '⚪'
             
-            # 7. Создаем объяснение решения  
+            
             reasoning_parts = []
             if ai_level:
                 ai_response = ai_result.get('raw_response', 'N/A')[:30]
@@ -407,7 +407,7 @@ class UrgencyDetector:
             
         except Exception as e:
             logger.error(f"❌ Ошибка анализа срочности: {e}")
-            # Fallback результат
+            
             return {
                 'urgency_level': 'normal',
                 'urgency_score': 0.0,
@@ -424,7 +424,7 @@ class UrgencyDetector:
         emoji = urgency_data['emoji']
         level = urgency_data['urgency_level']
         
-        # Добавляем префикс в зависимости от уровня
+        
         if level == 'urgent':
             prefix = f"{emoji} **СРОЧНО**"
         elif level == 'important':
@@ -443,7 +443,7 @@ class UrgencyDetector:
         }
 
 
-# Глобальный экземпляр детектора
+
 urgency_detector = UrgencyDetector()
 
 

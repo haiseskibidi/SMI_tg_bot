@@ -18,7 +18,7 @@ class ChannelUI:
         try:
             text = "🗂️ <b>Управление каналами</b>\n\n"
             
-            # Подсчет общей статистики
+            
             total_channels = 0
             for region_data in channels_data.values():
                 total_channels += len(region_data.get('channels', []))
@@ -26,7 +26,7 @@ class ChannelUI:
             text += f"📊 <b>Всего каналов:</b> {total_channels}\n"
             text += f"📂 <b>Регионов:</b> {len(channels_data)}\n\n"
             
-            # Создание кнопок по регионам
+            
             keyboard = []
             
             for region_key, region_data in channels_data.items():
@@ -37,7 +37,7 @@ class ChannelUI:
                 callback_data = f"manage_region_{region_key}"
                 keyboard.append([{"text": button_text, "callback_data": callback_data}])
             
-            # Кнопки управления
+            
             keyboard.append([
                 {"text": "➕ Добавить канал", "callback_data": "add_channel"},
                 {"text": "🔄 Обновить", "callback_data": "refresh_channels"}
@@ -46,7 +46,7 @@ class ChannelUI:
             
             text += "👇 Выберите регион для управления каналами:"
             
-            # Определение получателя
+            
             chat_id = message.get("chat", {}).get("id") if message else self.bot.admin_chat_id
             to_group = self.bot.is_message_from_group(chat_id) if chat_id else None
             
@@ -61,7 +61,7 @@ class ChannelUI:
     async def show_region_channels(self, region_key: str, page: int = 1):
         """Отображение каналов конкретного региона с пагинацией"""
         try:
-            # Получение каналов региона
+            
             channels_data = await self.bot.channel_manager.get_all_channels_grouped()
             
             if region_key not in channels_data:
@@ -76,22 +76,22 @@ class ChannelUI:
                 await self._show_empty_region(region_key, region_name)
                 return
             
-            # Пагинация
+            
             channels_per_page = 10
             total_pages = (len(channels) + channels_per_page - 1) // channels_per_page
             
-            # Валидация страницы
+            
             if page < 1:
                 page = 1
             elif page > total_pages:
                 page = total_pages
             
-            # Вычисление индексов для текущей страницы
+            
             start_idx = (page - 1) * channels_per_page
             end_idx = min(start_idx + channels_per_page, len(channels))
             current_channels = channels[start_idx:end_idx]
             
-            # Формирование текста
+            
             text = f"📂 <b>{region_name}</b>\n\n"
             text += f"📊 <b>Каналов в регионе:</b> {len(channels)}\n"
             text += f"📄 <b>Страница:</b> {page} из {total_pages}\n\n"
@@ -107,7 +107,7 @@ class ChannelUI:
                 callback_data = f"delete_channel|{region_key}|{username}"
                 keyboard.append([{"text": button_text, "callback_data": callback_data}])
             
-            # Навигационные кнопки (если страниц больше 1)
+            
             if total_pages > 1:
                 nav_buttons = []
                 
@@ -126,7 +126,7 @@ class ChannelUI:
                 if nav_buttons:
                     keyboard.append(nav_buttons)
             
-            # Кнопки навигации
+            
             keyboard.append([
                 {"text": "↩️ К списку регионов", "callback_data": "manage_channels"},
                 {"text": "🏠 Главное меню", "callback_data": "start"}
@@ -143,13 +143,13 @@ class ChannelUI:
     async def show_delete_confirmation(self, region_key: str, username: str):
         """Подтверждение удаления канала"""
         try:
-            # Получение информации о канале
+            
             channels_data = await self.bot.channel_manager.get_all_channels_grouped()
             
             region_info = channels_data.get(region_key, {})
             region_name = region_info.get('name', f'📍 {region_key.title()}')
             
-            # Поиск информации о канале
+            
             channel_title = f"@{username}"
             channels = region_info.get('channels', [])
             for channel in channels:
@@ -180,17 +180,17 @@ class ChannelUI:
     async def show_channel_preview_and_region_selection(self, channel_username: str, channel_title: str):
         """Превью канала и выбор региона"""
         try:
-            # Загрузка конфигурации регионов
+            
             regions_config = await self._load_regions_config()
             
             if not regions_config:
                 await self.bot.send_message("❌ Регионы не настроены в конфигурации")
                 return
             
-            # Автоопределение региона
+            
             auto_region = self._detect_channel_region(channel_title, channel_username, regions_config)
             
-            # Формирование текста превью
+            
             text = f"➕ <b>Добавление канала</b>\n\n"
             text += f"📄 <b>Название:</b> {channel_title}\n"
             text += f"🔗 <b>Username:</b> @{channel_username}\n\n"
@@ -202,13 +202,13 @@ class ChannelUI:
             
             text += "🌏 <b>Выберите регион для канала:</b>"
             
-            # Построение клавиатуры выбора
+            
             keyboard = []
             for region_key, region_data in regions_config.items():
                 emoji = region_data.get('emoji', '📍')
                 name = region_data.get('name', region_key.title())
                 
-                # Отмечаем автоопределенный регион
+                
                 if region_key == auto_region:
                     name += " ⭐"
                 
@@ -219,7 +219,7 @@ class ChannelUI:
                     "callback_data": f"region_selected_{region_key}"
                 }])
             
-            # Кнопка создания нового региона
+            
             keyboard.append([{
                 "text": "➕ Создать новый регион",
                 "callback_data": "create_new_region"
@@ -377,12 +377,12 @@ class ChannelUI:
     async def show_region_stats(self, region_key: str):
         """Статистика каналов региона"""
         try:
-            # Получение данных из базы через monitor_bot
+            
             if not self.bot.monitor_bot or not self.bot.monitor_bot.database:
                 await self.bot.send_message("❌ База данных недоступна для статистики")
                 return
             
-            # Получение каналов региона
+            
             channels_data = await self.bot.channel_manager.get_all_channels_grouped()
             region_info = channels_data.get(region_key, {})
             region_name = region_info.get('name', f'📍 {region_key.title()}')
@@ -395,15 +395,15 @@ class ChannelUI:
             text = f"📊 <b>Статистика региона {region_name}</b>\n\n"
             text += f"📂 <b>Каналов в регионе:</b> {len(channels)}\n\n"
             
-            # Статистика по каналам (упрощенная версия)
+            
             text += "📋 <b>Активность каналов за сегодня:</b>\n"
             
             active_count = 0
-            for channel in channels[:10]:  # Показываем первые 10
+            for channel in channels[:10]:  
                 username = channel.get('username')
                 try:
-                    # Простой подсчет сообщений (можно расширить)
-                    count = 0  # Здесь мог бы быть запрос к БД
+                    
+                    count = 0  
                     status = "🟢" if count > 0 else "⚪"
                     text += f"{status} @{username}: {count} сообщений\n"
                     if count > 0:
@@ -437,7 +437,7 @@ class ChannelUI:
             username_lower = username.lower()
             combined_text = f"{title_lower} {username_lower}"
             
-            # Поиск по ключевым словам каждого региона
+            
             for region_key, region_data in regions.items():
                 keywords = region_data.get('keywords', [])
                 for keyword in keywords:
@@ -459,7 +459,7 @@ class ChannelUI:
                 config_loader = self.bot.monitor_bot.config_loader
                 return config_loader.get_regions_config()
             
-            # Fallback - прямое чтение файла
+            
             import yaml
             with open('config/config.yaml', 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)

@@ -45,7 +45,7 @@ class ChannelCommands:
             if hasattr(self.bot.main_instance.telegram_monitor, "clear_cache"):
                 await self.bot.main_instance.telegram_monitor.clear_cache()
 
-            channels_data = await self.bot.get_channels_from_config()  # type: ignore[attr-defined]
+            channels_data = await self.bot.get_channels_from_config()  
             all_channels = channels_data.get("channels", [])
             if not all_channels:
                 await self.bot.send_message("❌ Нет каналов для подписки в конфигурации")

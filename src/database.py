@@ -22,7 +22,7 @@ class DatabaseManager:
         self.db_path = db_path
         self.lock = threading.Lock()
         
-        # Создаем директорию если не существует
+        
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"🗄️ DatabaseManager инициализирован: {db_path}")
@@ -30,7 +30,7 @@ class DatabaseManager:
     def _get_connection(self):
         """Получение соединения с базой данных"""
         conn = sqlite3.connect(self.db_path, timeout=30.0)
-        conn.row_factory = sqlite3.Row  # Доступ к колонкам по имени
+        conn.row_factory = sqlite3.Row  
         return conn
     
     async def initialize(self):
@@ -38,18 +38,18 @@ class DatabaseManager:
         try:
             def _init_db():
                 with self._get_connection() as conn:
-                    # Создаем таблицы
+                    
                     self._create_tables_sync(conn)
                     
-                    # Настройки оптимизации SQLite
-                    conn.execute("PRAGMA journal_mode = WAL")  # Улучшенная производительность
-                    conn.execute("PRAGMA synchronous = NORMAL")  # Баланс скорости и надежности
-                    conn.execute("PRAGMA cache_size = 10000")  # 10MB кэш
-                    conn.execute("PRAGMA temp_store = MEMORY")  # Временные данные в RAM
+                    
+                    conn.execute("PRAGMA journal_mode = WAL")  
+                    conn.execute("PRAGMA synchronous = NORMAL")  
+                    conn.execute("PRAGMA cache_size = 10000")  
+                    conn.execute("PRAGMA temp_store = MEMORY")  
                     
                     conn.commit()
             
-            # Выполняем в отдельном потоке чтобы не блокировать event loop
+            
             await asyncio.get_event_loop().run_in_executor(None, _init_db)
             
             logger.info("✅ База данных инициализирована")
@@ -61,7 +61,7 @@ class DatabaseManager:
     def _create_tables_sync(self, conn: sqlite3.Connection):
         """Создание таблиц базы данных (синхронная версия)"""
         
-        # Таблица сообщений
+        
         conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
@@ -89,7 +89,7 @@ class DatabaseManager:
             )
         """)
         
-        # Таблица для отслеживания последних проверок каналов
+        
         conn.execute("""
             CREATE TABLE IF NOT EXISTS channel_checks (
                 channel_username TEXT PRIMARY KEY,
@@ -102,7 +102,7 @@ class DatabaseManager:
             )
         """)
         
-        # Таблица статистики
+        
         conn.execute("""
             CREATE TABLE IF NOT EXISTS statistics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,7 +118,7 @@ class DatabaseManager:
             )
         """)
         
-        # Таблица для дедупликации
+        
         conn.execute("""
             CREATE TABLE IF NOT EXISTS processed_hashes (
                 content_hash TEXT PRIMARY KEY,
@@ -127,7 +127,7 @@ class DatabaseManager:
             )
         """)
         
-        # Таблица для отслеживания отправленных дайджестов
+        
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sent_digests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,7 +138,7 @@ class DatabaseManager:
             )
         """)
         
-        # Создаем индексы для оптимизации
+        
         conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_score ON messages(ai_score)")
@@ -149,7 +149,7 @@ class DatabaseManager:
         """Сохранение сообщения в базу данных"""
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                # Проверяем дубликаты по хэшу
+                
                 content_hash = message_data.get('content_hash')
                 if content_hash:
                     cursor = await db.execute(
@@ -160,12 +160,12 @@ class DatabaseManager:
                         logger.debug(f"🔄 Дубликат сообщения: {message_data['id']}")
                         return False
                 
-                # Подготавливаем данные
+                
                 ai_analysis_json = None
                 if message_data.get('ai_analysis'):
                     ai_analysis_json = json.dumps(message_data['ai_analysis'], ensure_ascii=False)
                 
-                # Сохраняем сообщение
+                
                 await db.execute("""
                     INSERT OR REPLACE INTO messages (
                         id, channel_username, channel_name, channel_region, channel_category,
@@ -196,7 +196,7 @@ class DatabaseManager:
                     message_data.get('selected_for_output', False)
                 ))
                 
-                # Сохраняем хэш для дедупликации
+                
                 if content_hash:
                     await db.execute("""
                         INSERT OR REPLACE INTO processed_hashes (content_hash, first_seen, count)
@@ -220,7 +220,7 @@ class DatabaseManager:
             async with aiosqlite.connect(self.db_path) as db:
                 for message_data in messages:
                     try:
-                        # Проверяем дубликаты
+                        
                         content_hash = message_data.get('content_hash')
                         if content_hash:
                             cursor = await db.execute(
@@ -230,12 +230,12 @@ class DatabaseManager:
                             if await cursor.fetchone():
                                 continue
                         
-                        # Подготавливаем данные
+                        
                         ai_analysis_json = None
                         if message_data.get('ai_analysis'):
                             ai_analysis_json = json.dumps(message_data['ai_analysis'], ensure_ascii=False)
                         
-                        # Сохраняем
+                        
                         await db.execute("""
                             INSERT OR REPLACE INTO messages (
                                 id, channel_username, channel_name, channel_region, channel_category,
@@ -325,7 +325,7 @@ class DatabaseManager:
                 for row in rows:
                     message_data = dict(zip(columns, row))
                     
-                    # Парсим JSON данные
+                    
                     if message_data.get('ai_analysis'):
                         try:
                             message_data['ai_analysis'] = json.loads(message_data['ai_analysis'])
@@ -362,20 +362,20 @@ class DatabaseManager:
             cutoff_date = datetime.now() - timedelta(days=days_to_keep)
             
             async with aiosqlite.connect(self.db_path) as db:
-                # Удаляем старые сообщения
+                
                 cursor = await db.execute(
                     "DELETE FROM messages WHERE date < ?",
                     (cutoff_date,)
                 )
                 deleted_messages = cursor.rowcount
                 
-                # Удаляем старые хэши
+                
                 await db.execute(
                     "DELETE FROM processed_hashes WHERE first_seen < ?",
                     (cutoff_date,)
                 )
                 
-                # Оптимизируем базу
+                
                 await db.execute("VACUUM")
                 
                 await db.commit()
@@ -389,7 +389,7 @@ class DatabaseManager:
         """Получение статистики работы"""
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                # Общие счетчики
+                
                 cursor = await db.execute("SELECT COUNT(*) FROM messages")
                 total_messages = (await cursor.fetchone())[0]
                 
@@ -399,7 +399,7 @@ class DatabaseManager:
                 cursor = await db.execute("SELECT COUNT(*) FROM messages WHERE selected_for_output = TRUE")
                 selected_messages = (await cursor.fetchone())[0]
                 
-                # Статистика за сегодня
+                
                 today = datetime.now().date()
                 cursor = await db.execute(
                     "SELECT COUNT(*) FROM messages WHERE DATE(created_at) = DATE(?)",
@@ -436,7 +436,7 @@ class DatabaseManager:
         try:
             today = datetime.now().strftime('%Y-%m-%d')
             
-            # Подсчитываем статистику
+            
             total_query = """
                 SELECT COUNT(*) FROM messages 
                 WHERE DATE(created_at) = ?
@@ -448,12 +448,12 @@ class DatabaseManager:
             """
             
             async with aiosqlite.connect(self.db_path) as db:
-                # Общее количество сообщений
+                
                 async with db.execute(total_query, (today,)) as cursor:
                     total_result = await cursor.fetchone()
                     total_messages = total_result[0] if total_result else 0
                 
-                # Количество отобранных сообщений
+                
                 async with db.execute(selected_query, (today,)) as cursor:
                     selected_result = await cursor.fetchone()
                     selected_messages = selected_result[0] if selected_result else 0
@@ -535,7 +535,7 @@ class DatabaseManager:
         try:
             today = datetime.now().date()
             
-            # Получаем ID новостей, которые уже были отправлены
+            
             async with aiosqlite.connect(self.db_path) as db:
                 cursor = await db.execute(
                     "SELECT news_ids FROM sent_digests WHERE date = ?",
@@ -548,7 +548,7 @@ class DatabaseManager:
                     if row[0]:
                         sent_ids.update(row[0].split(','))
                 
-                # Получаем отобранные новости, исключая уже отправленные
+                
                 cursor = await db.execute("""
                     SELECT * FROM messages 
                     WHERE selected_for_output = TRUE 
@@ -564,11 +564,11 @@ class DatabaseManager:
                 for row in rows:
                     message_data = dict(zip(columns, row))
                     
-                    # Пропускаем уже отправленные новости
+                    
                     if message_data['id'] in sent_ids:
                         continue
                     
-                    # Парсим JSON данные
+                    
                     if message_data.get('ai_analysis'):
                         try:
                             message_data['ai_analysis'] = json.loads(message_data['ai_analysis'])
@@ -663,7 +663,7 @@ class DatabaseManager:
     ) -> List[Dict[str, Any]]:
         """Получить топ новости за период по популярности"""
         try:
-            # Базовый запрос
+            
             query = """
                 SELECT 
                     id, channel_username, channel_name, channel_region,
@@ -677,16 +677,16 @@ class DatabaseManager:
             
             params = [start_date, end_date]
             
-            # Фильтр по каналу (ПРИОРИТЕТ!)
+            
             if channel:
                 query += " AND channel_username = ?"
                 params.append(channel)
-            # Или фильтр по региону (если канал не указан)
+            
             elif region:
                 query += " AND channel_region = ?"
                 params.append(region)
             
-            # Сортировка по популярности и ограничение
+            
             query += " ORDER BY popularity_score DESC, date DESC LIMIT ?"
             params.append(limit)
             

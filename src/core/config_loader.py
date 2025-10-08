@@ -42,7 +42,7 @@ class ConfigLoader:
         api_id = os.getenv('TELEGRAM_API_ID')
         api_hash = os.getenv('TELEGRAM_API_HASH')
         
-        # Поддерживаем разные имена переменных для target_group
+        
         target_group = (os.getenv('TARGET_GROUP_ID') or 
                        os.getenv('YOUR_TARGET_GROUP_FROM_ENV') or
                        os.getenv('BOT_TARGET_GROUP'))
@@ -61,7 +61,7 @@ class ConfigLoader:
         if api_hash:
             self.config.setdefault('telegram', {})['api_hash'] = api_hash
         if target_group:
-            # Исправляем: сохраняем в правильное место - output.target_group
+            
             self.config.setdefault('output', {})['target_group'] = int(target_group)
             logger.info(f"🎯 Настроена целевая группа: {target_group}")
         if bot_allowed_users:
@@ -158,22 +158,22 @@ class ConfigLoader:
             monitoring_config = self.config.get('monitoring', {})
             timeouts = monitoring_config.get('timeouts', {}) if monitoring_config else {}
         
-        # ⚠️ БЕЗОПАСНЫЕ значения по умолчанию (предотвращают длительные блокировки)
+        
         default_timeouts = {
-            'batch_size': 6,                    # Каналов в одном пакете (уменьшено для безопасности)
-            'delay_cached_channel': 1,          # Задержка для кешированных каналов (сек)
-            'delay_already_joined': 2,          # Задержка для уже подписанных (сек) - увеличено
-            'delay_verification': 3,            # Задержка между попытками верификации (сек) - увеличено
-            'delay_after_subscribe': 5,         # Задержка после успешной подписки (сек) - увеличено
-            'delay_between_batches': 8,         # Задержка между пакетами каналов (сек) - увеличено
-            'delay_retry_wait': 300,            # Ожидание перед повтором rate limit (сек) = 5 минут
-            'delay_retry_subscribe': 5,         # Задержка после повторной подписки (сек) - увеличено
-            'delay_between_retries': 8,         # Задержка между повторными каналами (сек) - увеличено
-            'fast_start_mode': True,            # 🚀 Режим быстрого старта (приоритет кешированным каналам)
-            'skip_new_on_startup': False,       # Пропускать новые каналы при запуске (только кеш)
+            'batch_size': 6,                    
+            'delay_cached_channel': 1,          
+            'delay_already_joined': 2,          
+            'delay_verification': 3,            
+            'delay_after_subscribe': 5,         
+            'delay_between_batches': 8,         
+            'delay_retry_wait': 300,            
+            'delay_retry_subscribe': 5,         
+            'delay_between_retries': 8,         
+            'fast_start_mode': True,            
+            'skip_new_on_startup': False,       
         }
         
-        # Объединяем значения по умолчанию с пользовательскими
+        
         for key, default_value in default_timeouts.items():
             if key not in timeouts:
                 timeouts[key] = default_value

@@ -22,7 +22,7 @@ class LifecycleManager:
         self.running = False
         self.restart_check_file = "config/.last_restart"
         
-        # Компоненты системы
+        
         self.database: Optional["DatabaseManager"] = None
         self.telegram_monitor: Optional["TelegramMonitor"] = None
         self.telegram_bot: Optional["TelegramBot"] = None
@@ -69,24 +69,24 @@ class LifecycleManager:
 
             config = self.config_loader.get_config()
             
-            # 1. База данных
+            
             db_config = config.get('database', {})
             self.database = DatabaseManager(db_config.get('path', 'news_monitor.db'))
             await self.database.initialize()
             
-            # 2. Системный монитор
+            
             system_config = config.get('system', {})
             self.system_monitor = SystemMonitor(
                 memory_limit_mb=system_config.get('memory_limit_mb', 800)
             )
             
-            # 3. Telegram бот (ОСНОВНОЙ КАНАЛ СВЯЗИ) - временно без monitor_bot
+            
             self.telegram_bot = await create_bot_from_config(config, None)
             if not self.telegram_bot:
                 logger.error("❌ Не удалось создать Telegram бота")
                 return False
             
-            # 4. Telegram монитор (ОПЦИОНАЛЬНО)
+            
             try:
                 telegram_config = config['telegram']
                 self.telegram_monitor = TelegramMonitor(
@@ -105,7 +105,7 @@ class LifecycleManager:
                 logger.warning(f"⚠️ Telegram мониторинг недоступен: {e}")
                 self.telegram_monitor = None
             
-            # 5. Процессор новостей
+            
             monitoring_config = config.get('monitoring', {})
             self.news_processor = NewsProcessor(
                 database=self.database,
@@ -150,7 +150,7 @@ class LifecycleManager:
         """Проверяет безопасность перезапуска (предотвращает блокировки Telegram)"""
         try:
             if not os.path.exists(self.restart_check_file):
-                # Первый запуск - создаем файл
+                
                 self._update_restart_time()
                 return True
             
@@ -161,8 +161,8 @@ class LifecycleManager:
             now = datetime.now()
             time_diff = now - last_restart
             
-            # Проверяем, прошло ли достаточно времени с последнего перезапуска
-            min_restart_interval = timedelta(minutes=30)  # Минимум 30 минут между перезапусками
+            
+            min_restart_interval = timedelta(minutes=30)  
             
             if time_diff < min_restart_interval:
                 remaining = min_restart_interval - time_diff
@@ -173,7 +173,7 @@ class LifecycleManager:
                 logger.error(f"🔧 Решение: подождите или используйте другой аккаунт")
                 return False
             
-            # Обновляем время последнего запуска
+            
             self._update_restart_time()
             return True
             
@@ -193,7 +193,7 @@ class LifecycleManager:
 
     async def run(self):
         try:
-            # Проверяем безопасность перезапуска
+            
             if not self._check_restart_safety():
                 return False
             

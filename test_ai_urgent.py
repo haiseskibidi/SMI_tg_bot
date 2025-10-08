@@ -5,7 +5,7 @@ import asyncio
 from src.ai.urgency_detector import analyze_news_urgency, initialize_urgency_detector
 
 async def test_urgent_news():
-    # Инициализируем AI детектор
+    
     print("🔄 Инициализация AI детектора...")
     await initialize_urgency_detector()
     print("✅ AI детектор инициализирован\n")

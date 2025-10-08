@@ -13,20 +13,20 @@ class ChannelParser:
             
             channel_input = channel_input.strip()
             
-            # Формат: https://t.me/channel_name
+            
             if "t.me/" in channel_input:
                 match = re.search(r't\.me/([a-zA-Z_][a-zA-Z0-9_]{3,})', channel_input)
                 if match:
                     return match.group(1)
             
-            # Формат: @channel_name
+            
             elif channel_input.startswith("@"):
                 username = channel_input[1:]
                 if self._is_valid_username(username):
                     return username
             
             
-            # Формат: tg://resolve?domain=channel_name
+            
             elif "tg://resolve?domain=" in channel_input:
                 match = re.search(r'domain=([a-zA-Z_][a-zA-Z0-9_]{3,})', channel_input)
                 if match:
@@ -49,17 +49,17 @@ class ChannelParser:
                 if not line:
                     continue
                 
-                # Попытка парсинга каждой строки как канала
+                
                 username = self.parse_channel_username(line)
                 if username:
                     channels.append(username)
                 else:
-                    # Возможно, в строке несколько каналов
-                    # Ищем все упоминания @channel или t.me/channel
+                    
+                    
                     found_channels = self._extract_channels_from_line(line)
                     channels.extend(found_channels)
             
-            return list(set(channels))  # Убираем дубликаты
+            return list(set(channels))  
             
         except Exception as e:
             logger.error(f"❌ Ошибка парсинга нескольких каналов: {e}")
@@ -68,11 +68,11 @@ class ChannelParser:
     def _extract_channels_from_line(self, line: str) -> List[str]:
         channels = []
         
-        # Поиск @mentions
+        
         mentions = re.findall(r'@([a-zA-Z_][a-zA-Z0-9_]{3,})', line)
         channels.extend(mentions)
         
-        # Поиск t.me/ ссылок
+        
         tme_links = re.findall(r't\.me/([a-zA-Z_][a-zA-Z0-9_]{3,})', line)
         channels.extend(tme_links)
         

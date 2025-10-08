@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 📦 Автоматический бэкап channels_config.yaml
 """
@@ -11,37 +11,37 @@ from pathlib import Path
 def backup_channels_config():
     """Создать бэкап channels_config.yaml"""
     
-    # Пути
+    
     source = Path('config/channels_config.yaml')
     backup_dir = Path('backups/channels_config')
     
-    # Создать папку бэкапов
+    
     backup_dir.mkdir(parents=True, exist_ok=True)
     
     if not source.exists():
         print('❌ Файл channels_config.yaml не найден')
         return False
     
-    # Имя бэкапа с датой
+    
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     backup_name = f'channels_config_{timestamp}.yaml'
     backup_path = backup_dir / backup_name
     
-    # Копировать файл
+    
     shutil.copy2(source, backup_path)
     
-    # Создать симлинк на последний бэкап
+    
     latest_link = backup_dir / 'latest.yaml'
     if latest_link.exists():
         latest_link.unlink()
     
-    # В Windows используем copy вместо симлинка
+    
     shutil.copy2(backup_path, latest_link)
     
     print(f'✅ Бэкап создан: {backup_name}')
     print(f'📁 Путь: {backup_path}')
     
-    # Очистить старые бэкапы (оставить последние 10)
+    
     cleanup_old_backups(backup_dir)
     
     return True
@@ -53,10 +53,10 @@ def cleanup_old_backups(backup_dir, keep_count=10):
     for file in backup_dir.glob('channels_config_*.yaml'):
         backup_files.append(file)
     
-    # Сортировать по времени создания
+    
     backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
     
-    # Удалить старые
+    
     for file in backup_files[keep_count:]:
         file.unlink()
         print(f'🗑️ Удален старый бэкап: {file.name}')

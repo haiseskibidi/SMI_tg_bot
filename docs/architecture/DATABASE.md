@@ -1,6 +1,6 @@
-# 🗄️ DATABASE - Система хранения данных
 
-## 🎯 Обзор
+
+
 
 SQLite база данных оптимизированная для VPS с ограниченными ресурсами. Хранит новости, метаданные каналов, статистику работы и обеспечивает дедупликацию сообщений.
 
@@ -10,9 +10,9 @@ SQLite база данных оптимизированная для VPS с ог
 
 ---
 
-## 🏗️ Архитектура базы данных
 
-### Схема таблиц
+
+
 
 ```sql
 -- 📰 ОСНОВНАЯ ТАБЛИЦА: Сообщения и новости
@@ -83,7 +83,7 @@ sent_digests (
 )
 ```
 
-### Индексы для оптимизации
+
 ```sql
 CREATE INDEX idx_messages_channel ON messages(channel_username);
 CREATE INDEX idx_messages_date ON messages(date);
@@ -94,53 +94,53 @@ CREATE INDEX idx_hash_lookup ON processed_hashes(content_hash);
 
 ---
 
-## ⚙️ Класс DatabaseManager
 
-### Инициализация и оптимизация
+
+
 
 ```python
 class DatabaseManager:
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.lock = threading.Lock()  # Thread safety
+        self.lock = threading.Lock()  
         
     async def initialize(self):
         """Создание таблиц + оптимизация SQLite"""
-        # Настройки производительности
-        conn.execute("PRAGMA journal_mode = WAL")    # Write-Ahead Logging
-        conn.execute("PRAGMA synchronous = NORMAL")  # Баланс скорости/надежности  
-        conn.execute("PRAGMA cache_size = 10000")    # 10MB кэш
-        conn.execute("PRAGMA temp_store = MEMORY")   # Временные данные в RAM
+        
+        conn.execute("PRAGMA journal_mode = WAL")    
+        conn.execute("PRAGMA synchronous = NORMAL")  
+        conn.execute("PRAGMA cache_size = 10000")    
+        conn.execute("PRAGMA temp_store = MEMORY")   
 ```
 
-### Ключевые концепции
 
-#### 🔄 Асинхронность
+
+
 - **aiosqlite**: неблокирующие операции с базой
 - **executor**: тяжелые операции в отдельном потоке
 - **connection pooling**: переиспользование соединений
 
-#### 🛡️ Thread Safety
+
 - **threading.Lock**: защита от гонки потоков
 - **SQLite WAL mode**: поддержка concurrent reads
 - **Timeout 30s**: защита от deadlocks
 
-#### 🎯 Оптимизация для VPS
+
 - **Ограниченный кэш**: 10MB для экономии RAM
 - **Batch operations**: пакетные вставки для скорости
 - **Smart indexing**: индексы только на нужные поля
 
 ---
 
-## 📝 Основные операции с данными
 
-### Сохранение сообщений
 
-#### Одиночное сохранение
+
+
+
 ```python
 async def save_message(self, message_data: Dict) -> bool:
     """Сохранение одного сообщения с проверкой дубликатов"""
-    # 1. Проверка дедупликации по content_hash
+    
     if content_hash:
         cursor = await db.execute(
             "SELECT id FROM messages WHERE content_hash = ?", 
@@ -150,40 +150,40 @@ async def save_message(self, message_data: Dict) -> bool:
             logger.debug(f"🔄 Дубликат сообщения: {message_data['id']}")
             return False
     
-    # 2. Подготовка JSON данных (AI анализ)
+    
     ai_analysis_json = None
     if message_data.get('ai_analysis'):
         ai_analysis_json = json.dumps(message_data['ai_analysis'], ensure_ascii=False)
     
-    # 3. Вставка в messages таблицу
+    
     await db.execute("""INSERT OR REPLACE INTO messages (...) VALUES (...)""")
     
-    # 4. Сохранение хэша для дедупликации
+    
     await db.execute("""
         INSERT OR REPLACE INTO processed_hashes (content_hash, first_seen, count)
         VALUES (?, ?, COALESCE((SELECT count + 1 FROM processed_hashes WHERE content_hash = ?), 1))
     """, (content_hash, datetime.now(), content_hash))
 ```
 
-#### Пакетное сохранение
+
 ```python
 async def save_messages_batch(self, messages: List[Dict]) -> int:
     """Эффективное сохранение большого количества сообщений"""
     saved_count = 0
     async with aiosqlite.connect(self.db_path) as db:
         for message_data in messages:
-            # Проверка дубликатов + вставка
-            # ... аналогично save_message
+            
+            
             saved_count += 1
-        await db.commit()  # Один коммит для всей пачки
+        await db.commit()  
     
     logger.info(f"💾 Пакетное сохранение: {saved_count}/{len(messages)} сообщений")
     return saved_count
 ```
 
-### Получение данных
 
-#### Топ новости за период
+
+
 ```python
 async def get_top_news_for_period(
     self, start_date, end_date, 
@@ -193,7 +193,7 @@ async def get_top_news_for_period(
 ) -> List[Dict[str, Any]]:
     """Получить самые популярные новости с гибкой фильтрацией"""
     
-    # Формула популярности
+    
     query = """
         SELECT *, 
         (views + forwards * 2 + replies * 3 + reactions_count * 5) as popularity_score
@@ -201,17 +201,17 @@ async def get_top_news_for_period(
         WHERE date >= ? AND date <= ? AND text IS NOT NULL AND text != ''
     """
     
-    # Фильтры
-    if channel:          # Приоритет конкретному каналу
+    
+    if channel:          
         query += " AND channel_username = ?"
-    elif region:         # Или по региону
+    elif region:         
         query += " AND channel_region = ?"
     
-    # Сортировка по популярности
+    
     query += " ORDER BY popularity_score DESC, date DESC LIMIT ?"
 ```
 
-#### Статистика и аналитика
+
 ```python
 async def get_active_channels_count(self) -> int:
     """Количество активных каналов за последние 24 часа"""
@@ -230,16 +230,16 @@ async def get_latest_message_info(self) -> Dict[str, Any]:
         ORDER BY created_at DESC LIMIT 1
     """
     
-    # Формирование превью (первые 3 слова)
+    
     words = text.split()[:3]
     preview = ' '.join(words) + ('...' if len(words) == 3 else '')
 ```
 
 ---
 
-## 🔄 Дедупликация сообщений
 
-### Алгоритм предотвращения дубликатов
+
+
 
 ```python
 def generate_content_hash(message_text: str, channel_username: str) -> str:
@@ -247,7 +247,7 @@ def generate_content_hash(message_text: str, channel_username: str) -> str:
     content = f"{channel_username}:{message_text}"
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
-# Проверка при сохранении
+
 content_hash = message_data.get('content_hash')
 if content_hash:
     cursor = await db.execute(
@@ -255,12 +255,12 @@ if content_hash:
         (content_hash,)
     )
     if await cursor.fetchone():
-        return False  # Дубликат найден, не сохраняем
+        return False  
 ```
 
-### Статистика дубликатов
+
 ```python
-# Таблица processed_hashes ведет счетчик повторов
+
 INSERT OR REPLACE INTO processed_hashes (content_hash, first_seen, count)
 VALUES (?, ?, COALESCE((SELECT count + 1 FROM processed_hashes WHERE content_hash = ?), 1))
 ```
@@ -269,15 +269,15 @@ VALUES (?, ?, COALESCE((SELECT count + 1 FROM processed_hashes WHERE content_has
 
 ---
 
-## 📊 Система статистики
 
-### Ежедневная аналитика
+
+
 ```python
 async def get_today_stats(self) -> Dict[str, int]:
     """Статистика за текущий день"""
     today = datetime.now().strftime('%Y-%m-%d')
     
-    # Подсчет сообщений
+    
     total_query = "SELECT COUNT(*) FROM messages WHERE DATE(created_at) = ?"
     selected_query = "SELECT COUNT(*) FROM messages WHERE DATE(created_at) = ? AND selected_for_output = 1"
     
@@ -288,7 +288,7 @@ async def get_today_stats(self) -> Dict[str, int]:
     }
 ```
 
-### Мониторинг каналов
+
 ```python
 async def update_last_check_time(self, channel_username: str, check_time: datetime):
     """Обновление времени последней проверки канала"""
@@ -301,9 +301,9 @@ async def update_last_check_time(self, channel_username: str, check_time: dateti
 
 ---
 
-## 📰 Дайджест система
 
-### Отслеживание отправленных дайджестов
+
+
 ```python
 async def mark_digest_sent(self, news_ids: List[str]) -> bool:
     """Отметить дайджест как отправленный"""
@@ -323,48 +323,48 @@ async def was_digest_sent_today(self) -> bool:
     return result[0] > 0
 ```
 
-### Неотправленные новости
+
 ```python
 async def get_unsent_news_today(self, limit: int = 999999) -> List[Dict]:
     """Получить новости, которые еще не включались в дайджесты"""
-    # 1. Получаем ID уже отправленных новостей
+    
     sent_ids = set()
     for row in sent_results:
         if row[0]:
             sent_ids.update(row[0].split(','))
     
-    # 2. Исключаем их из выборки
+    
     for row in rows:
         message_data = dict(zip(columns, row))
         if message_data['id'] in sent_ids:
-            continue  # Пропускаем уже отправленные
+            continue  
         results.append(message_data)
 ```
 
 ---
 
-## 🛠️ Обслуживание базы данных
 
-### Очистка старых данных
+
+
 ```python
 async def cleanup_old_data(self, days_to_keep: int = 30):
     """Автоматическая очистка для экономии места"""
     cutoff_date = datetime.now() - timedelta(days=days_to_keep)
     
-    # Удаляем старые сообщения
+    
     cursor = await db.execute("DELETE FROM messages WHERE date < ?", (cutoff_date,))
     deleted_messages = cursor.rowcount
     
-    # Удаляем старые хэши
+    
     await db.execute("DELETE FROM processed_hashes WHERE first_seen < ?", (cutoff_date,))
     
-    # Оптимизируем базу
+    
     await db.execute("VACUUM")
     
     logger.info(f"🧹 Очистка БД: удалено {deleted_messages} старых сообщений")
 ```
 
-### Оптимизация производительности
+
 ```python
 async def clear_cache(self):
     """Очистка кэша SQLite"""
@@ -374,19 +374,19 @@ async def clear_cache(self):
 
 ---
 
-## 🔗 Связи с другими модулями
 
-### Входящие данные
+
+
 - **← MessageProcessor**: сохранение новых сообщений
 - **← ChannelMonitor**: обновление статуса каналов
 - **← TelegramBot**: запросы статистики и команд
 
-### Исходящие данные  
+
 - **→ DigestGenerator**: данные для генерации дайджестов
 - **→ TelegramBot**: статистика для команд (/status, /stats)
 - **→ WebInterface**: данные для веб-панели
 
-### Схема потока данных
+
 ```
 Telegram Channel → MessageProcessor → Database.save_message()
                                           ↓
@@ -397,24 +397,24 @@ TelegramBot.status() ← Database.get_statistics() ← Database
 
 ---
 
-## 🔍 Диагностика проблем
 
-### Проверка состояния базы
+
+
 ```bash
-# Размер базы данных
+
 ls -lh news_monitor.db
 
-# Подключение к базе
+
 sqlite3 news_monitor.db
 
-# Основные запросы
-.tables                                    # Список таблиц
-SELECT COUNT(*) FROM messages;            # Количество сообщений
-SELECT COUNT(*) FROM channel_checks;      # Количество каналов
-SELECT * FROM statistics ORDER BY date DESC LIMIT 5;  # Последняя статистика
+
+.tables                                    
+SELECT COUNT(*) FROM messages;            
+SELECT COUNT(*) FROM channel_checks;      
+SELECT * FROM statistics ORDER BY date DESC LIMIT 5;  
 ```
 
-### Анализ производительности
+
 ```sql
 -- Самые активные каналы
 SELECT channel_username, COUNT(*) as msg_count 
@@ -434,9 +434,9 @@ ORDER BY size_bytes DESC;
 EXPLAIN QUERY PLAN SELECT * FROM messages WHERE channel_username = 'test';
 ```
 
-### Типичные проблемы
 
-#### Медленные запросы
+
+
 ```sql
 -- Проверить использование индексов
 EXPLAIN QUERY PLAN SELECT * FROM messages WHERE date > '2025-01-01';
@@ -446,46 +446,46 @@ DROP INDEX IF EXISTS idx_messages_date;
 CREATE INDEX idx_messages_date ON messages(date);
 ```
 
-#### Блокировки базы
+
 ```bash
-# Проверить WAL файлы
+
 ls -la news_monitor.db*
 
-# Если база заблокирована
-fuser news_monitor.db        # Найти процессы
-kill -9 <PID>               # Завершить если нужно
+
+fuser news_monitor.db        
+kill -9 <PID>               
 ```
 
-#### Переполнение диска
+
 ```python
-# В коде есть автоочистка
+
 await database.cleanup_old_data(days_to_keep=30)
 
-# Или вручную
+
 DELETE FROM messages WHERE date < datetime('now', '-30 days');
 VACUUM;
 ```
 
 ---
 
-## 📈 Метрики производительности
 
-### Целевые показатели
+
+
 - **Вставка сообщения**: < 10ms
 - **Batch вставка 100 сообщений**: < 100ms  
 - **Топ новости за неделю**: < 500ms
 - **Размер базы**: < 500MB для 30 дней данных
 - **Использование RAM**: < 50MB кэша
 
-### Мониторинг в продакшене
+
 ```python
-# Логи производительности
+
 logger.info(f"💾 Пакетное сохранение: {saved_count}/{len(messages)} сообщений")
 logger.info(f"📊 Найдено {len(results)} топ новостей за период")
 
-# Проверка размера базы
-db_size = os.path.getsize(self.db_path) / (1024 * 1024)  # MB
-if db_size > 1000:  # Больше 1GB
+
+db_size = os.path.getsize(self.db_path) / (1024 * 1024)  
+if db_size > 1000:  
     logger.warning(f"⚠️ База данных большая: {db_size:.1f}MB")
 ```
 

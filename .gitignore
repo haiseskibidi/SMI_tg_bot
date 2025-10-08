@@ -1,19 +1,19 @@
-# Секретные данные - НИКОГДА не коммитить!
+
 .env
 .env.local
 .env.production
 
 .cursor/
 
-# Логи
+
 logs/
 *.log
 
-# Кэш подписок
+
 config/subscriptions_cache.json
 sessions/*.session
 
-# Python кэш
+
 __pycache__/
 *.py[cod]
 *$py.class
@@ -36,14 +36,14 @@ wheels/
 *.egg
 MANIFEST
 
-# Виртуальное окружение
+
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
 
-# IDE файлы
+
 .vscode/
 .cursor/
 .idea/
@@ -51,30 +51,30 @@ venv.bak/
 *.swo
 *~
 
-# Системные файлы
+
 .DS_Store
 Thumbs.db
 
-# Базы данных (если будут)
+
 *.db
 *.sqlite
 *.sqlite3
 
-# Временные файлы
+
 *.tmp
 *.temp
 temp/
 tmp/
 
-# Скриншоты и медиа файлы
+
 screenshots/
 media/
 uploads/
 
-# Рабочие файлы и заметки
+
 roadmap.md
 server_commands.txt
 
-# Дополнительные файлы сессий и бэкапы
+
 sessions/*.session-journal
 backups/

@@ -56,7 +56,7 @@ class MessageProcessor:
             
             analysis_text = await self._get_text_for_analysis(message, channel_username)
             
-            # Если нашли текст в медиа-группе, обновляем message_data
+            
             if analysis_text and not message_data.get('text'):
                 message_data['text'] = analysis_text
                 logger.info(f"📝 Обновлен текст в message_data для медиа-группы: {analysis_text[:100]}...")
@@ -65,7 +65,7 @@ class MessageProcessor:
             
             message_data = await self._check_alerts(message_data, final_text)
             
-            # 🤖 Анализ срочности с помощью AI
+            
             message_data = await self._analyze_urgency(message_data, final_text)
             
             logger.info(f"⚡ Новое сообщение из @{channel_username} - мгновенная отправка!")
@@ -101,11 +101,11 @@ class MessageProcessor:
     async def _get_text_for_analysis(self, message, channel_username: str) -> str:
         """Получает текст для AI анализа, включая текст из медиа-групп"""
         try:
-            # Если у сообщения есть текст, используем его
+            
             if message.text and message.text.strip():
                 return message.text.strip()
             
-            # Если текста нет, но есть медиа-группа, ищем текст в группе
+            
             if hasattr(message, 'grouped_id') and message.grouped_id:
                 logger.info(f"🔍 Ищем текст в медиа-группе {message.grouped_id} для AI анализа")
                 
@@ -114,11 +114,11 @@ class MessageProcessor:
                     logger.warning(f"❌ Не удалось получить entity для {channel_username}")
                     return ""
                 
-                # Получаем последние сообщения для поиска медиа-группы
+                
                 all_messages = await self.app_instance.telegram_monitor.client.get_messages(entity, limit=20)
                 group_messages = [msg for msg in all_messages if hasattr(msg, 'grouped_id') and msg.grouped_id == message.grouped_id]
                 
-                # Ищем сообщение с текстом в группе
+                
                 for msg in group_messages:
                     if msg.text and msg.text.strip():
                         logger.info(f"📝 Найден текст в медиа-группе (длина {len(msg.text)}): {msg.text[:100]}...")
@@ -206,7 +206,7 @@ class MessageProcessor:
         try:
             if not text or not text.strip():
                 logger.info(f"🤖 Пропускаем анализ срочности - нет текста от @{message_data.get('channel_username', 'unknown')}")
-                # Для медиа-групп без текста просто добавляем белый круг
+                
                 if not message_data.get('text'):
                     message_data['text'] = f"⚪ {message_data.get('text', '')}"
                 return message_data
@@ -217,7 +217,7 @@ class MessageProcessor:
             
             logger.info(f"🤖 Анализируем срочность новости от @{message_data['channel_username']} (длина текста: {len(text)})")
             
-            # Вызываем AI анализ
+            
             urgency_result = await analyze_news_urgency(
                 text=text,
                 source=message_data['channel_username']
@@ -225,10 +225,10 @@ class MessageProcessor:
             
             logger.info(f"🎯 AI результат: уровень={urgency_result['urgency_level']}, скор={urgency_result['urgency_score']:.2f}, эмодзи={urgency_result['emoji']}")
             
-            # Проверяем, не определил ли AI это как спам/рекламу
+            
             if urgency_result['urgency_level'] == 'ignore':
                 logger.info(f"🚫 AI определил как спам/рекламу сообщение от @{message_data['channel_username']} - помечаем эмодзи")
-                # Просто добавляем эмодзи 🚫 и продолжаем обработку
+                
                 message_data['text'] = f"🚫 {text}"
                 message_data['urgency_level'] = 'ignore'
                 message_data['urgency_score'] = 0.0
@@ -238,7 +238,7 @@ class MessageProcessor:
                 logger.info(f"📝 Текст после AI анализа: 🚫 {text[:50]}...")
                 return message_data
             
-            # Сохраняем результаты анализа в message_data
+            
             message_data['urgency_level'] = urgency_result['urgency_level']
             message_data['urgency_score'] = urgency_result['urgency_score'] 
             message_data['urgency_emoji'] = urgency_result['emoji']
@@ -246,28 +246,28 @@ class MessageProcessor:
             message_data['urgency_reasoning'] = urgency_result['reasoning']
             message_data['ai_analyzed'] = urgency_result['ai_classification']['ai_available']
             
-            # Модифицируем текст сообщения в зависимости от срочности
+            
             urgency_level = urgency_result['urgency_level']
             emoji = urgency_result['emoji']
             
             if urgency_level == 'urgent':
-                # Добавляем яркий префикс для срочных новостей
+                
                 message_data['text'] = f"{emoji} **🚨 СРОЧНО 🚨**\n\n{text}"
                 logger.warning(f"🔴 СРОЧНАЯ новость от @{message_data['channel_username']}: {urgency_result['urgency_score']:.2f}")
                 
             elif urgency_level == 'important':
-                # Добавляем префикс для важных новостей
+                
                 message_data['text'] = f"{emoji} **ВАЖНО**\n\n{text}"
                 logger.info(f"🟡 ВАЖНАЯ новость от @{message_data['channel_username']}: {urgency_result['urgency_score']:.2f}")
                 
             else:
-                # Обычные новости - просто добавляем эмодзи
+                
                 message_data['text'] = f"{emoji} {text}"
                 logger.debug(f"⚪ Обычная новость от @{message_data['channel_username']}: {urgency_result['urgency_score']:.2f}")
             
             logger.info(f"📝 Текст после AI анализа: {message_data['text'][:100]}...")
             
-            # Логируем детали анализа
+            
             if urgency_result['keywords']:
                 logger.info(f"🎯 Найдены ключевые слова: {urgency_result['keywords'][:3]}...")
             
@@ -280,7 +280,7 @@ class MessageProcessor:
             import traceback
             logger.error(f"❌ Ошибка анализа срочности: {e}")
             logger.error(f"📋 Трейс ошибки: {traceback.format_exc()}")
-            # В случае ошибки возвращаем исходные данные с белым кружком
+            
             message_data['text'] = f"⚪ {text}"
             return message_data
 
@@ -322,7 +322,7 @@ class MessageProcessor:
             'реклама', 'Реклама'
         ]
         
-        # Проверяем наличие спам-слов
+        
         spam_words_found = [word for word in spam_keywords if word in text_lower]
         
         if spam_words_found:

@@ -20,7 +20,7 @@ class ChannelMonitor:
         self.message_processor = message_processor
         self.channels_config_path = "config/channels_config.yaml"
         
-        # ⏱️ НАСТРОЙКИ ТАЙМАУТОВ (загружаются из конфигурации или используются по умолчанию)
+        
         if config_loader:
             try:
                 timeouts = config_loader.get_monitoring_timeouts()
@@ -34,7 +34,7 @@ class ChannelMonitor:
                     self.delay_retry_wait = timeouts.get('delay_retry_wait', 300)
                     self.delay_retry_subscribe = timeouts.get('delay_retry_subscribe', 5)
                     self.delay_between_retries = timeouts.get('delay_between_retries', 8)
-                    # 🚀 Новые настройки оптимизации
+                    
                     self.fast_start_mode = timeouts.get('fast_start_mode', True)
                     self.skip_new_on_startup = timeouts.get('skip_new_on_startup', False)
                 else:
@@ -44,7 +44,7 @@ class ChannelMonitor:
                 logger.error(f"❌ Ошибка загрузки настроек таймаутов: {e}")
                 self._set_default_timeouts()
         else:
-            # ⚠️ БЕЗОПАСНЫЕ значения по умолчанию (если конфигурация недоступна)
+            
             self._set_default_timeouts()
 
     def _set_default_timeouts(self):
@@ -150,7 +150,7 @@ class ChannelMonitor:
         for channel_config in all_channels:
             username = channel_config['username']
             
-            # Проверяем кэш БЕЗ API вызова
+            
             if self.subscription_cache.is_channel_cached_as_subscribed(username):
                 cached_channels.append(channel_config)
             else:
@@ -166,7 +166,7 @@ class ChannelMonitor:
             new_usernames = [ch['username'] for ch in new_channels[:5]]
             logger.info(f"📋 Первые 5 новых каналов: {new_usernames}... и еще {len(new_channels)-5}")
         
-        # Быстро получаем entity для кешированных каналов
+        
         monitored_channels = []
         for i, channel_config in enumerate(cached_channels):
             try:
@@ -176,8 +176,8 @@ class ChannelMonitor:
                 entity = await self.telegram_monitor.get_channel_entity(username)
                 if entity:
                     monitored_channels.append(entity)
-                    # Минимальная задержка только для кешированных
-                    if i % 10 == 0 and i > 0:  # Каждые 10 каналов небольшая пауза
+                    
+                    if i % 10 == 0 and i > 0:  
                         await asyncio.sleep(0.5)
                 else:
                     failed_entities.append(channel_config)
@@ -187,7 +187,7 @@ class ChannelMonitor:
                 failed_entities.append(channel_config)
                 logger.warning(f"⚠️ Ошибка загрузки кешированного канала {username}: {e}")
         
-        # Добавляем неудачные кешированные каналы к новым для повторной обработки
+        
         new_channels.extend(failed_entities)
         
         logger.info(f"✅ Быстро загружено: {len(monitored_channels)} кешированных каналов")
@@ -288,7 +288,7 @@ class ChannelMonitor:
                     logger.error(f"❌ Общая ошибка обработки канала {channel_config.get('username', 'unknown')}: {e}")
                     failed_count += 1
             
-            # Увеличенная пауза между пакетами для новых каналов
+            
             await asyncio.sleep(self.delay_between_batches)
         
         logger.info(f"📊 Результаты медленной обработки:")
@@ -310,27 +310,27 @@ class ChannelMonitor:
         logger.info(f"📊 Всего каналов для обработки: {len(all_channels)}")
         
         if not self.fast_start_mode:
-            # Обычный режим - обрабатываем все каналы медленно
+            
             return await self._slow_process_new_channels(all_channels)[0]
         
-        # СИНХРОНИЗАЦИЯ КЭША: удаляем несуществующие каналы
+        
         current_channels = {ch['username'] for ch in all_channels}
         self.subscription_cache.sync_cache_with_config(current_channels)
         
-        # ЭТАП 1: Быстрая загрузка кешированных каналов (секунды)
+        
         fast_channels, new_channels = await self._fast_load_cached_channels(all_channels)
         
-        # ЭТАП 2: Решение по новым каналам
+        
         if self.skip_new_on_startup and new_channels:
             logger.warning(f"⏭️ ПРОПУСК НОВЫХ КАНАЛОВ: {len(new_channels)} каналов будут пропущены при запуске")
             logger.warning("💡 Для обработки новых каналов используйте команду /force_subscribe в боте")
             slow_channels = []
             rate_limited_channels = []
         else:
-            # ЭТАП 2: Медленная обработка новых каналов (минуты)
+            
             slow_channels, rate_limited_channels = await self._slow_process_new_channels(new_channels)
         
-        # Объединяем результаты
+        
         all_monitored = fast_channels + slow_channels
         self._rate_limited_channels = rate_limited_channels
         
@@ -395,12 +395,12 @@ class ChannelMonitor:
     def _extract_wait_time(self, error_message: str) -> Optional[int]:
         """Извлекает время ожидания (в секундах) из сообщения об ошибке Telegram"""
         try:
-            # Ищем паттерн "wait of X seconds" в сообщении
+            
             match = re.search(r'wait of (\d+) seconds', error_message)
             if match:
                 return int(match.group(1))
             
-            # Альтернативные паттерны
+            
             match = re.search(r'(\d+) seconds is required', error_message)
             if match:
                 return int(match.group(1))

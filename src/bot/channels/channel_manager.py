@@ -23,7 +23,7 @@ class ChannelManager:
         try:
             logger.info(f"➕ Обработка добавления канала: {channel_link}")
             
-            # Парсинг ссылки
+            
             channel_username = self.parser.parse_channel_username(channel_link)
             if not channel_username:
                 await self.bot.send_message(
@@ -35,18 +35,18 @@ class ChannelManager:
                 )
                 return
             
-            # Проверка на дубликат
+            
             if self.is_channel_already_added(channel_username):
                 await self.bot.send_message(f"ℹ️ Канал @{channel_username} уже добавлен в мониторинг")
                 return
             
-            # Получение информации о канале
+            
             channel_title = await self._get_channel_title(channel_username)
             
-            # Сохранение для выбора региона
+            
             self.bot.pending_channel_url = channel_username
             
-            # Показ интерфейса выбора региона
+            
             from ..ui.keyboard_builder import KeyboardBuilder
             keyboard_builder = KeyboardBuilder(self.bot)
             from ..channels.channel_ui import ChannelUI
@@ -62,14 +62,14 @@ class ChannelManager:
         try:
             config_path = "config/channels_config.yaml"
             
-            # Загрузка существующей конфигурации
+            
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = yaml.safe_load(f) or {}
             else:
                 config = {}
             
-            # Инициализация структуры
+            
             if 'regions' not in config:
                 config['regions'] = {}
             if region not in config['regions']:
@@ -78,27 +78,27 @@ class ChannelManager:
                     'channels': []
                 }
             
-            # Проверка на дубликат
+            
             existing_channels = config['regions'][region].get('channels', [])
             for channel in existing_channels:
                 if channel.get('username') == channel_username:
                     logger.warning(f"⚠️ Канал @{channel_username} уже существует в регионе {region}")
                     return False
             
-            # Добавление нового канала
+            
             new_channel = {
                 'title': f'Канал @{channel_username}',
                 'username': channel_username
             }
             config['regions'][region]['channels'].append(new_channel)
             
-            # Сохранение конфигурации
+            
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, allow_unicode=True, indent=2, default_flow_style=False)
             
             logger.info(f"✅ Канал @{channel_username} добавлен в регион {region}")
             
-            # Автоматический коммит изменений
+            
             await self._auto_commit_config(
                 f"Add channel @{channel_username} to {region}",
                 ["config/channels_config.yaml"]
@@ -124,7 +124,7 @@ class ChannelManager:
             channels = config['regions'][region_key].get('channels', [])
             original_count = len(channels)
             
-            # Удаление канала
+            
             config['regions'][region_key]['channels'] = [
                 ch for ch in channels if ch.get('username') != username
             ]
@@ -135,13 +135,13 @@ class ChannelManager:
                 logger.warning(f"⚠️ Канал @{username} не найден в регионе {region_key}")
                 return False
             
-            # Сохранение обновленной конфигурации
+            
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, allow_unicode=True, indent=2, default_flow_style=False)
             
             logger.info(f"🗑️ Канал @{username} удален из региона {region_key}")
             
-            # Автоматический коммит
+            
             await self._auto_commit_config(
                 f"Remove channel @{username} from {region_key}",
                 ["config/channels_config.yaml"]  
@@ -167,7 +167,7 @@ class ChannelManager:
             if not config or 'regions' not in config:
                 return {}
             
-            # Обогащение данных из основной конфигурации
+            
             main_config = await self._load_main_config()
             regions_info = main_config.get('regions', {})
             
@@ -175,7 +175,7 @@ class ChannelManager:
             for region_key, region_data in config['regions'].items():
                 channels = region_data.get('channels', [])
                 
-                # Получение метаданных региона
+                
                 region_info = regions_info.get(region_key, {})
                 
                 result[region_key] = {
@@ -202,7 +202,7 @@ class ChannelManager:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
             
-            # Преобразование в плоский список
+            
             all_channels = []
             for region_key, region_data in config.get('regions', {}).items():
                 channels = region_data.get('channels', [])
@@ -243,7 +243,7 @@ class ChannelManager:
     async def _get_channel_title(self, username: str) -> str:
         """Получение названия канала"""
         try:
-            # Попытка получить название через monitor_bot
+            
             if self.bot.monitor_bot and hasattr(self.bot.monitor_bot, 'telegram_monitor'):
                 telegram_monitor = self.bot.monitor_bot.telegram_monitor
                 if telegram_monitor and telegram_monitor.is_connected:
@@ -251,7 +251,7 @@ class ChannelManager:
                     if entity and hasattr(entity, 'title'):
                         return entity.title
             
-            # Fallback название
+            
             return f"Канал @{username}"
             
         except Exception as e:
@@ -268,16 +268,16 @@ class ChannelManager:
                 await self.bot.send_message("❌ Регионы не настроены в конфигурации")
                 return
             
-            # Автоопределение региона
+            
             auto_region = self._detect_channel_region(title, username, regions)
             
-            # Построение клавиатуры выбора
+            
             keyboard = []
             for region_key, region_data in regions.items():
                 emoji = region_data.get('emoji', '📍')
                 name = region_data.get('name', region_key.title())
                 
-                # Отмечаем автоопределенный регион
+                
                 if region_key == auto_region:
                     name += " ⭐"
                 
@@ -288,7 +288,7 @@ class ChannelManager:
                     "callback_data": f"region_selected_{region_key}"
                 }])
             
-            # Кнопка создания нового региона
+            
             keyboard.append([{
                 "text": "➕ Создать новый регион",
                 "callback_data": "create_new_region"
@@ -313,7 +313,7 @@ class ChannelManager:
             username_lower = username.lower()
             combined_text = f"{title_lower} {username_lower}"
             
-            # Поиск по ключевым словам каждого региона
+            
             for region_key, region_data in regions.items():
                 keywords = region_data.get('keywords', [])
                 for keyword in keywords:
@@ -349,7 +349,7 @@ class ChannelManager:
             if not files_changed:
                 files_changed = ["config/channels_config.yaml"]
             
-            # Проверка наличия git
+            
             import subprocess
             try:
                 subprocess.run(["git", "--version"], capture_output=True, check=True)
@@ -357,7 +357,7 @@ class ChannelManager:
                 logger.debug("📝 Git не найден, пропускаем автокоммит")
                 return True
             
-            # Добавление файлов в git
+            
             for file_path in files_changed:
                 result = subprocess.run(
                     ["git", "add", file_path], 
@@ -366,7 +366,7 @@ class ChannelManager:
                 if result.returncode != 0:
                     logger.warning(f"⚠️ Не удалось добавить {file_path} в git: {result.stderr}")
             
-            # Коммит изменений
+            
             commit_message = f"Update configuration: {action_description}"
             result = subprocess.run(
                 ["git", "commit", "-m", commit_message],
@@ -386,8 +386,8 @@ class ChannelManager:
     
     async def _show_region_selection_for_channel(self, username: str, title: str):
         """Показ интерфейса выбора региона"""
-        # Эта логика будет перенесена в ChannelUI
-        # Пока используем упрощенную версию
+        
+        
         await self.bot.send_message(
             f"🌏 <b>Выберите регион для канала:</b>\n\n"
             f"📺 <b>{title}</b>\n@{username}\n\n"

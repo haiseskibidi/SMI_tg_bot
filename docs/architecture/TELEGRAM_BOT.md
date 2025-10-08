@@ -1,6 +1,6 @@
-# 🤖 TELEGRAM BOT - Интерфейс бота
 
-## 🎯 Обзор
+
+
 
 Telegram бот предоставляет полнофункциональный интерфейс управления системой мониторинга новостей. Работает как в личных чатах админа, так и в группах. Поддерживает команды, inline кнопки и интерактивные диалоги.
 
@@ -10,44 +10,44 @@ Telegram бот предоставляет полнофункциональны�
 
 ---
 
-## 🏗️ Архитектура системы
 
-### Основные компоненты
+
+
 
 ```
 src/bot/ (Модульная архитектура)
 ├── core/
-│   ├── bot_client.py      # Главный класс TelegramBot
-│   └── update_processor.py # Обработка входящих сообщений
+│   ├── bot_client.py      
+│   └── update_processor.py 
 ├── ui/
-│   └── keyboard_builder.py # Генерация клавиатур
+│   └── keyboard_builder.py 
 ├── channels/
-│   ├── channel_manager.py  # Логика управления каналами
-│   ├── channel_parser.py   # Парсинг ссылок
-│   └── channel_ui.py       # Интерфейс каналов
+│   ├── channel_manager.py  
+│   ├── channel_parser.py   
+│   └── channel_ui.py       
 ├── regions/
-│   ├── region_manager.py   # Логика регионов
-│   └── region_ui.py        # Интерфейс регионов
+│   ├── region_manager.py   
+│   └── region_ui.py        
 ├── handlers/
-│   └── callback_processor.py # Обработка callback запросов
+│   └── callback_processor.py 
 ├── digest/
-│   └── digest_interface.py # Интерфейс дайджестов
+│   └── digest_interface.py 
 └── utils/
-    ├── config_operations.py # Операции с конфигом
-    └── text_helpers.py     # Помощники для текста
+    ├── config_operations.py 
+    └── text_helpers.py     
 
 src/handlers/ (Интерфейсный слой)
 ├── commands/
-│   ├── basic.py           # /start, /status, /help
-│   ├── channels.py        # /add_channel, /force_subscribe
-│   ├── regions.py         # Команды регионов
-│   └── management.py      # Административные команды
+│   ├── basic.py           
+│   ├── channels.py        
+│   ├── regions.py         
+│   └── management.py      
 └── callbacks/
-    ├── channels.py        # Callbacks каналов
-    └── regions.py         # Callbacks регионов
+    ├── channels.py        
+    └── regions.py         
 ```
 
-### Схема обработки событий
+
 
 ```
 Telegram API → UpdateProcessor.process_update()
@@ -60,14 +60,14 @@ Telegram API → UpdateProcessor.process_update()
 
 ---
 
-## 🎛️ Система команд
 
-### BasicCommands - Основной интерфейс
+
+
 
 **Файл**: `src/handlers/commands/basic.py` (370+ строк)  
 **Функция**: Главное меню, статус системы, управление мониторингом
 
-#### Главное меню (/start)
+
 ```python
 class BasicCommands:
     async def start(self, message: Optional[Dict[str, Any]]) -> None:
@@ -85,17 +85,17 @@ class BasicCommands:
         ]
 ```
 
-#### Статус системы (/status)
+
 ```python
 async def status(self, message: Optional[Dict[str, Any]]) -> None:
-    # Проверка состояния компонентов
+    
     monitoring_status = "🟢 Запущен" if self.bot.main_instance.monitoring_active else "🔴 Остановлен"
     
-    # Статистика из базы данных  
+    
     db_stats = await self.bot.main_instance.database.get_today_stats()
     active_channels = await self.bot.main_instance.database.get_active_channels_count()
     
-    # Последнее сообщение
+    
     last_message = await self.bot.main_instance.database.get_latest_message_info()
     
     status_text = f"""
@@ -107,16 +107,16 @@ async def status(self, message: Optional[Dict[str, Any]]) -> None:
     """
 ```
 
-#### Kill Switch (/kill_switch)
+
 ```python
 async def kill_switch(self, message: Optional[Dict[str, Any]]) -> None:
     """Экстренная остановка системы с созданием файла блокировки"""
     try:
-        # Создание файла блокировки
+        
         with open("STOP_BOT", "w") as f:
             f.write(f"Система остановлена: {datetime.now()}")
         
-        # Остановка мониторинга
+        
         if self.bot.main_instance:
             self.bot.main_instance.monitoring_active = False
         
@@ -125,7 +125,7 @@ async def kill_switch(self, message: Optional[Dict[str, Any]]) -> None:
                                    "💡 Используйте /unlock для разблокировки")
 ```
 
-### ChannelCommands - Управление каналами
+
 
 **Файл**: `src/handlers/commands/channels.py`  
 **Функция**: Добавление каналов, принудительная подписка
@@ -149,7 +149,7 @@ async def add_channel(self, message: Optional[Dict[str, Any]]) -> None:
     await self.bot.add_channel_handler(channel_link)
 ```
 
-### ManagementCommands - Управление системой
+
 
 **Файл**: `src/handlers/commands/management.py`  
 **Функция**: Статистика
@@ -157,7 +157,7 @@ async def add_channel(self, message: Optional[Dict[str, Any]]) -> None:
 ```python
 async def stats(self, message: Optional[Dict[str, Any]]) -> None:
     """Детальная статистика работы системы"""
-    # Получение статистики из базы
+    
     stats = await self.bot.main_instance.database.get_today_stats()
     
     stats_text = f"""
@@ -172,9 +172,9 @@ async def stats(self, message: Optional[Dict[str, Any]]) -> None:
 
 ---
 
-## 🔘 Система Callback-ов
 
-### ChannelCallbacks - Интерфейс управления каналами
+
+
 
 **Файл**: `src/handlers/callbacks/channels.py`  
 **Функция**: Визуальное управление каналами через inline кнопки
@@ -184,7 +184,7 @@ class ChannelCallbacks:
     async def show_channels_management(self, channels_data: Dict[str, Any]) -> None:
         """Показать список каналов по регионам с кнопками управления"""
         
-        # Группировка каналов по регионам
+        
         for region_key, region_info in channels_data.items():
             channels_count = len(region_info.get('channels', []))
             keyboard.append([{
@@ -200,7 +200,7 @@ class ChannelCallbacks:
         ]
 ```
 
-### RegionCallbacks - Работа с регионами
+
 
 **Файл**: `src/handlers/callbacks/regions.py`  
 **Функция**: Выбор регионов, создание новых регионов
@@ -210,7 +210,7 @@ class RegionCallbacks:
     async def handle_region_selection(self, region: str) -> None:
         """Обработка выбора региона для канала"""
         if self.bot.pending_channel_url:
-            # Добавление канала в выбранный регион
+            
             await self.bot.add_channel_to_region(self.bot.pending_channel_url, region)
     
     async def start_create_region_flow(self) -> None:
@@ -224,9 +224,9 @@ class RegionCallbacks:
 
 ---
 
-## 📨 Система отправки сообщений
 
-### Маршрутизация сообщений
+
+
 
 ```python
 class TelegramBot:
@@ -234,42 +234,42 @@ class TelegramBot:
         """Универсальная отправка с автоматическим выбором получателя"""
         try:
             if to_user:
-                # Конкретному пользователю
+                
                 target_chat_id = to_user
             elif to_group and self.group_chat_id:
-                # В группу (для новостей и системных сообщений)
+                
                 target_chat_id = self.group_chat_id
             else:
-                # Админу в личку (для управления)
+                
                 target_chat_id = self.admin_chat_id
             
             return await self._send_to_single_user(text, target_chat_id)
 ```
 
-### Редактирование vs новые сообщения
+
 
 ```python
-# Режимы работы (настраивается в /settings)
-self.edit_messages = True      # True = редактировать, False = новые сообщения
-self.delete_commands = True    # Удалять команды пользователя
+
+self.edit_messages = True      
+self.delete_commands = True    
 
 async def send_message_with_keyboard(self, text: str, keyboard: List, use_reply_keyboard: bool = False):
     """Отправка с клавиатурой"""
     if self.edit_messages and self.last_message_id:
-        # Попытка редактирования существующего сообщения
+        
         success = await self.edit_message(text, self.last_message_id, keyboard)
         if success:
             return success
     
-    # Отправка нового сообщения
+    
     response = await self.send_new_message_with_keyboard(text, keyboard)
 ```
 
 ---
 
-## 🔄 Обработка событий
 
-### Основной цикл прослушивания
+
+
 
 ```python
 async def start_listening(self):
@@ -279,7 +279,7 @@ async def start_listening(self):
     
     while self.is_listening:
         try:
-            # Получение обновлений от Telegram
+            
             updates = await self.get_updates()
             
             if updates:
@@ -291,28 +291,28 @@ async def start_listening(self):
             await asyncio.sleep(5)
 ```
 
-### Обработка разных типов событий
+
 
 ```python
 async def process_update(self, update: dict):
     """Диспетчер событий"""
     
-    # 1. Текстовые сообщения (команды и ссылки)
+    
     if "message" in update:
         message = update["message"]
         text = message.get("text", "")
         
         if text.startswith("/"):
-            # Команды бота (/start, /status, etc.)
+            
             await self.handle_command(text, message)
         elif "t.me/" in text or text.startswith("@"):
-            # Ссылки на каналы
+            
             await self.add_channel_handler(text)
         else:
-            # Обычные сообщения
+            
             await self.handle_text_input(text, message)
     
-    # 2. Callback query (нажатия inline кнопок)  
+    
     elif "callback_query" in update:
         callback = update["callback_query"]
         callback_data = callback.get("data", "")
@@ -321,46 +321,46 @@ async def process_update(self, update: dict):
 
 ---
 
-## 🔗 Интеграция с системой мониторинга
 
-### Связь с главным приложением
+
+
 
 ```python
-# В NewsMonitorWithBot (src/core/app.py)
+
 async def initialize_components(self):
     """Инициализация бота как компонента системы"""
     
-    # Создание экземпляра бота
+    
     self.telegram_bot = TelegramBot(
         bot_token=bot_config.get('token'),
         admin_chat_id=bot_config.get('chat_id'), 
         group_chat_id=output_config.get('target_group'),
-        monitor_bot=self  # Передача ссылки на основное приложение
+        monitor_bot=self  
     )
     
-    # Запуск прослушивания команд
+    
     bot_listener_task = asyncio.create_task(
         self.telegram_bot.start_listening()
     )
 ```
 
-### Доступ к компонентам системы
+
 
 ```python
 class TelegramBot:
     def __init__(self, monitor_bot=None):
-        self.monitor_bot = monitor_bot      # Основное приложение
-        self.main_instance = monitor_bot    # Алиас
+        self.monitor_bot = monitor_bot      
+        self.main_instance = monitor_bot    
     
     async def get_system_status(self):
         """Получение статуса через основное приложение"""
         if not self.main_instance:
             return "❌ Нет связи с системой"
         
-        # Доступ к базе данных
+        
         stats = await self.main_instance.database.get_today_stats()
         
-        # Доступ к мониторингу
+        
         monitoring_active = self.main_instance.monitoring_active
         
         return f"📊 Система: {'🟢 OK' if monitoring_active else '🔴 Остановлена'}"
@@ -368,131 +368,131 @@ class TelegramBot:
 
 ---
 
-## ⚙️ Интерактивные диалоги
 
-### Добавление канала (пример workflow)
+
+
 
 ```python
-# 1. Пользователь отправляет ссылку
+
 "https://t.me/news_channel" → add_channel_handler()
 
-# 2. Извлечение username канала  
+
 channel_username = extract_channel_username(url)
 
-# 3. Показ регионов для выбора
+
 await show_region_selection_for_channel(channel_username)
 
-# 4. Обработка выбора региона (callback)
+
 "region_selected_kamchatka" → handle_region_selection("kamchatka")
 
-# 5. Добавление в конфиг и подписка
+
 await add_channel_to_config(channel_username, region)
 await monitor_bot.subscribe_to_single_channel(channel_username)
 ```
 
-### Создание региона (multi-step диалог)
+
 
 ```python
-# 1. Начало процесса
+
 self.waiting_for_region_name = True
 await send_message("Введите название региона:")
 
-# 2. Ввод названия
+
 user_input → handle_region_creation(region_input)
 
-# 3. Выбор эмодзи
+
 await show_emoji_selection(region_name)  
 
-# 4. Подтверждение
+
 await show_region_creation_confirmation(region_data)
 
-# 5. Создание
+
 await create_region_confirmed(region_key)
 ```
 
 ---
 
-## 🔍 Диагностика проблем
 
-### Проверка состояния бота
 
-#### 📊 Логи системы
+
+
+
 ```bash
-# Статус прослушивания
+
 grep "👂 Бот начал прослушивание" logs/news_monitor.log
 
-# Обработка команд
+
 grep "🎯 Получен callback\|💬 Команда:" logs/news_monitor.log  
 
-# Ошибки отправки
+
 grep "❌ Ошибка отправки сообщения" logs/news_monitor.log
 ```
 
-#### 🔧 Команды для диагностики
+
 ```bash
-/status          # Общий статус системы
-/start          # Проверка главного меню
-/help           # Список всех команд
+/status          
+/start          
+/help           
 ```
 
-### Типичные проблемы
 
-#### 🤖 "Бот не отвечает"
+
+
 ```python
-# Проверить токен бота
+
 if not self.bot_token or self.bot_token == "YOUR_BOT_TOKEN":
     logger.error("❌ Некорректный токен бота")
 
-# Проверить прослушивание 
+
 if not self.is_listening:
     logger.warning("⚠️ Бот не прослушивает команды")
 ```
 
-#### 📨 "Сообщения не отправляются"  
+
 ```python
-# Проверить chat_id
-if self.admin_chat_id == 123456789:  # Тестовое значение
+
+if self.admin_chat_id == 123456789:  
     logger.error("❌ Не настроен admin_chat_id")
 
-# Проверить подключение к API
+
 response = await httpx.get(f"{self.base_url}/getMe")
 if response.status_code != 200:
     logger.error("❌ Нет доступа к Telegram API")
 ```
 
-#### 🔘 "Кнопки не работают"
+
 ```bash
-# Проверить callback в логах
+
 grep "Получен callback" logs/news_monitor.log
 
-# Проверить регистрацию обработчиков
+
 grep "❓ Неизвестный callback" logs/news_monitor.log
 ```
 
-### Мониторинг в продакшене
 
-#### 📈 Ключевые метрики
+
+
 - **Время отклика**: < 2 секунды на команду
 - **Успешность отправки**: > 95% сообщений доставлено  
 - **Доступность**: 24/7 прослушивание команд
 - **Обработка ошибок**: graceful degradation при сбоях
 
-#### 🔧 Настройка в боевой среде
+
 ```yaml
-# config/config.yaml
+
 bot:
-  token: "${BOT_TOKEN}"           # Из переменных окружения
-  chat_id: "${BOT_CHAT_ID}"       # Админ ID
+  token: "${BOT_TOKEN}"           
+  chat_id: "${BOT_CHAT_ID}"       
   
 output:
-  target_group: "${TARGET_GROUP_ID}"  # Группа для новостей
+  target_group: "${TARGET_GROUP_ID}"  
 ```
 
 ---
 
-## 📱 Пользовательский интерфейс
 
-### Главное меню (inline кнопки)
+
+
 ```
 📊 Статус              🗂️ Управление каналами
 ➕ Добавить канал      📡 Принудительная подписка  
@@ -501,7 +501,7 @@ output:
 📰 Дайджест            🆘 Справка
 ```
 
-### Режимы работы
+
 - **Редактирование сообщений**: обновление одного сообщения (по умолчанию)
 - **Новые сообщения**: каждый ответ в новом сообщении  
 - **Удаление команд**: автоматическая очистка команд пользователя
