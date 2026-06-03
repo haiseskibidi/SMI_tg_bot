@@ -265,7 +265,7 @@ class TelegramMonitor:
             message_data['reactions_count'] = total_reactions
         
         # Хэш для дедупликации
-        content_hash = hashlib.md5(
+        content_hash = hashlib.sha256(
             f"{message.text[:1000]}{message.date}".encode()
         ).hexdigest()
         message_data['content_hash'] = content_hash

@@ -104,7 +104,7 @@ class MessageProcessor:
             msg_time = msg_time.astimezone(vladivostok_tz)
         
         text_for_hash = message.text or ''
-        content_hash = hashlib.md5(
+        content_hash = hashlib.sha256(
             f"{text_for_hash[:1000]}{message.date}".encode()
         ).hexdigest()
         
