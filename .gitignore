@@ -55,11 +55,6 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Базы данных (если будут)
-*.db
-*.sqlite
-*.sqlite3
-
 # Временные файлы
 *.tmp
 *.temp
