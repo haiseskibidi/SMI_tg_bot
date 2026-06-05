@@ -36,9 +36,31 @@ class MessageProcessor:
             has_media = bool(getattr(message, "media", None))
             
             # Исключаем рекламные сообщения
-            if has_text and self.app_instance.telegram_monitor and self.app_instance.telegram_monitor.is_spam(message.text):
-                logger.info(f"🚫 Сообщение от @{channel_username} определено как реклама/спам, пропускаем")
-                return
+            if self.app_instance.telegram_monitor:
+                is_media_group = has_media and hasattr(message, 'grouped_id') and message.grouped_id
+                
+                if not is_media_group:
+                    if has_text and self.app_instance.telegram_monitor.is_spam(message.text):
+                        logger.info(f"🚫 Сообщение от @{channel_username} определено как реклама/спам, пропускаем")
+                        return
+                else:
+                    grouped_id = message.grouped_id
+                    if grouped_id in self.processed_media_groups:
+                        logger.info(f"✅ Медиа группа {grouped_id} уже обработана, пропускаем")
+                        return
+                    
+                    try:
+                        entity = await self.app_instance.telegram_monitor.get_channel_entity(channel_username)
+                        all_messages = await self.app_instance.telegram_monitor.client.get_messages(entity, limit=50)
+                        group_messages = [msg for msg in all_messages if hasattr(msg, 'grouped_id') and msg.grouped_id == grouped_id]
+                        
+                        for g_msg in group_messages:
+                            if g_msg.text and self.app_instance.telegram_monitor.is_spam(g_msg.text):
+                                logger.info(f"🚫 Медиа группа {grouped_id} от @{channel_username} определена как реклама/спам, пропускаем")
+                                self.processed_media_groups.add(grouped_id)
+                                return
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка проверки медиагруппы на спам: {e}")
             
             if not await self._process_media_group(message, has_media):
                 return
