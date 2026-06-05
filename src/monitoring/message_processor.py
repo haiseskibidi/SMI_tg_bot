@@ -35,6 +35,11 @@ class MessageProcessor:
             has_text = bool(getattr(message, "text", None))
             has_media = bool(getattr(message, "media", None))
             
+            # Исключаем рекламные сообщения
+            if has_text and self.app_instance.telegram_monitor and self.app_instance.telegram_monitor.is_spam(message.text):
+                logger.info(f"🚫 Сообщение от @{channel_username} определено как реклама/спам, пропускаем")
+                return
+            
             if not await self._process_media_group(message, has_media):
                 return
             

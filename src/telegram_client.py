@@ -214,12 +214,18 @@ class TelegramMonitor:
             return False
         
         # Исключаем рекламные сообщения
-        spam_keywords = ['реклама', 'продам', 'куплю', 'сдам', 'найму']
-        text_lower = message.text.lower()
-        if any(spam in text_lower for spam in spam_keywords):
+        if self.is_spam(message.text):
             return False
         
         return True
+    
+    def is_spam(self, text: str) -> bool:
+        """Проверка текста на наличие спама/рекламы"""
+        if not text:
+            return False
+        spam_keywords = ['реклама', 'продам', 'куплю', 'сдам', 'найму']
+        text_lower = text.lower()
+        return any(spam in text_lower for spam in spam_keywords)
     
     def _get_replies_count(self, message: Message) -> int:
         """Безопасное получение количества ответов"""
