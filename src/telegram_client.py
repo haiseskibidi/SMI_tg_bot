@@ -85,8 +85,8 @@ class TelegramMonitor:
                 lang_code="ru",
                 system_lang_code="ru-RU",
                 # Оптимизация для VPS
-                connection_retries=3,
-                request_retries=2,
+                connection_retries=None,  # Бесконечное переподключение при сбоях сети
+                request_retries=5,
                 timeout=30
             )
             

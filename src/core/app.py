@@ -192,6 +192,17 @@ class NewsMonitorWithBot:
                         await self.send_status_update()
                         last_status_update = current_time
                     
+                    # Периодическая проверка статуса подключения Telethon-клиента
+                    if self.telegram_monitor and self.telegram_monitor.client:
+                        if not self.telegram_monitor.client.is_connected():
+                            logger.warning("🔌 Обнаружен разрыв соединения Telethon-клиента! Попытка переподключения...")
+                            try:
+                                await self.telegram_monitor.client.connect()
+                                if self.telegram_monitor.client.is_connected():
+                                    logger.success("🔌 Подключение к Telethon-клиенту успешно восстановлено!")
+                            except Exception as reconnect_err:
+                                logger.error(f"❌ Не удалось восстановить подключение Telethon-клиента: {reconnect_err}")
+                                
                     await asyncio.sleep(30)
                     
                 except Exception as e:
