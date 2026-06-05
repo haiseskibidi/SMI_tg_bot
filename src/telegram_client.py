@@ -98,6 +98,19 @@ class TelegramMonitor:
             if hasattr(me, 'phone') and me.phone:
                 logger.info(f"✅ Telegram клиент подключен как пользователь: {me.first_name} ({me.phone})")
                 self.is_connected = True
+                
+                # Предварительно заполняем кэш из диалогов (один запрос к API вместо десятков)
+                try:
+                    logger.info("📡 Загружаем диалоги для предварительного заполнения кэша...")
+                    dialogs = await self.client.get_dialogs(limit=None)
+                    for dialog in dialogs:
+                        entity = dialog.entity
+                        if hasattr(entity, 'username') and entity.username:
+                            self.channels_cache[entity.username.lower()] = entity
+                            self.channels_cache[entity.username] = entity
+                    logger.info(f"✅ Кэш предзаполнен: {len(self.channels_cache)} каналов загружено из диалогов")
+                except Exception as cache_err:
+                    logger.warning(f"⚠️ Не удалось предзаполнить кэш из диалогов: {cache_err}")
             else:
                 logger.warning(f"⚠️ Подключен как бот: {me.first_name}")
                 logger.warning("💡 Боты не могут читать каналы - нужна авторизация по номеру телефона")
@@ -119,9 +132,11 @@ class TelegramMonitor:
         # Нормализуем username (убираем @ для единообразия ключа кэша)
         normalized = username[1:] if isinstance(username, str) and username.startswith('@') else username
         
-        # Проверяем кэш
+        # Проверяем кэш (прямое совпадение и в нижнем регистре)
         if normalized in self.channels_cache:
             return self.channels_cache[normalized]
+        if normalized.lower() in self.channels_cache:
+            return self.channels_cache[normalized.lower()]
         
         try:
             # Telethon принимает оба варианта, но кэшируем по normalized
@@ -130,6 +145,7 @@ class TelegramMonitor:
             # Сохраняем в кэш (с ограничением размера)
             if len(self.channels_cache) < self.cache_max_size:
                 self.channels_cache[normalized] = entity
+                self.channels_cache[normalized.lower()] = entity
             
             logger.debug(f"📡 Получен канал: {normalized}")
             return entity
