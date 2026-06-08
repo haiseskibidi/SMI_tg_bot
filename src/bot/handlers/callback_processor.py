@@ -120,6 +120,9 @@ class CallbackProcessor:
         elif data.startswith("digest_"):
             await self._handle_digest_callbacks(data, message)
         
+        elif data == "kill_switch_confirm":
+            await self._handle_kill_switch_confirm()
+        
         else:
             logger.warning(f"❓ Неизвестный callback: {data}")
             await self.bot.send_message("❓ Неизвестная команда кнопки")
@@ -268,6 +271,23 @@ class CallbackProcessor:
         except Exception as e:
             logger.error(f"❌ Ошибка обработки пагинации дайджеста: {e}")
             await self.bot.send_message(f"❌ Ошибка получения страницы: {e}")
+
+    async def _handle_kill_switch_confirm(self):
+        try:
+            from datetime import datetime
+            import os
+            logger.warning("🚨 АКТИВАЦИЯ KILL SWITCH!")
+            
+            await self.bot.send_message("⚠️ <b>ВНИМАНИЕ: Активирован Kill Switch! Бот остановлен.</b>")
+            
+            with open("STOP_BOT", "w", encoding="utf-8") as f:
+                f.write(f"BLOCKED BY KILL SWITCH AT {datetime.now().isoformat()}")
+            
+            await asyncio.sleep(1)
+            os._exit(0)
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка активации Kill Switch: {e}")
     
     
     
