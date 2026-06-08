@@ -28,6 +28,15 @@ class CallbackProcessor:
     async def _route_callback(self, data: str, callback_query: Dict):
         message = {"message": {"chat": {"id": self.bot.current_callback_chat_id}}}
         
+        # Сброс флагов ожидания при переходе в главные разделы меню
+        main_menus = {
+            "start", "status", "help", "digest", "start_monitoring", 
+            "stop_monitoring", "restart", "stats", "manage_channels", 
+            "refresh_channels", "force_subscribe"
+        }
+        if data in main_menus:
+            self.bot.clear_waiting_states()
+            
         if data == "start":
             await self.bot.basic_commands.start(message)
         

@@ -151,6 +151,7 @@ class UpdateProcessor:
     
     async def _handle_command(self, text: str, message: Dict):
         try:
+            self.bot.clear_waiting_states()
             command_part = text.split()[0][1:].lower()
             
             if '@' in command_part:

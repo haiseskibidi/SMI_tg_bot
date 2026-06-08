@@ -273,10 +273,19 @@ class DigestGenerator:
                 message_date = message_date.astimezone(self.vladivostok_tz)
                 
                 # Фильтруем по дате
-                if message_date < start_date or message_date > end_date:
+                if message_date < start_date:
+                    logger.info(f"🛑 Достигли даты начала ({start_date}). Прекращаем поиск. Проверено сообщений: {total_messages_checked}")
+                    break
+                
+                if message_date > end_date:
                     if total_messages_checked <= 5:  # Логируем причины фильтрации для первых сообщений
-                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано по дате: {message_date} не в периоде {start_date} - {end_date}")
+                        logger.info(f"⏭️ Сообщение #{total_messages_checked} отфильтровано по дате: {message_date} больше даты окончания {end_date}")
                     continue
+                
+                # Защита от бесконечного цикла / высокой нагрузки (максимум 1000 проверенных сообщений)
+                if total_messages_checked >= 1000:
+                    logger.warning(f"⚠️ Превышен лимит проверки сообщений (1000). Останавливаем поиск.")
+                    break
                     
                 # Пропускаем сообщения без текста
                 if not message.text or len(message.text.strip()) < 10:
@@ -353,10 +362,6 @@ class DigestGenerator:
                 message_data['popularity_score'] = popularity_base * channel_tag_bonus * regional_bonus
                 
                 messages.append(message_data)
-                
-                # Если дошли до начала периода
-                if message_date < start_date:
-                    break
 
             logger.info(f"📊 Найдено {len(messages)} сообщений в канале @{channel_username} из {total_messages_checked} проверенных")
             

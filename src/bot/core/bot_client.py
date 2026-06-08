@@ -125,6 +125,18 @@ class TelegramBot:
     def is_message_from_group(self, chat_id: int) -> bool:
         return self.group_chat_id and chat_id == self.group_chat_id
     
+    def clear_waiting_states(self):
+        """Сброс всех флагов ожидания пользовательского ввода"""
+        logger.info("🧹 Сброс флагов ожидания ввода пользователя")
+        self.waiting_for_region_name = False
+        self.waiting_for_emoji = False
+        self.waiting_for_digest_channel = False
+        self.waiting_for_topic_id = False
+        self.pending_channel_url = None
+        self.pending_region_data = None
+        self.pending_topic_data = None
+        self.pending_topic_id = None
+    
     def register_command(self, command: str, handler):
         self.command_handlers[command] = handler
         logger.debug(f"🔧 Зарегистрирована команда: /{command}")
