@@ -32,6 +32,10 @@ class ChannelParser:
                 if match:
                     return match.group(1)
             
+            # Формат: channel_name (простое имя)
+            elif self._is_valid_username(channel_input):
+                return channel_input
+            
             logger.warning(f"⚠️ Не удалось распарсить ссылку: {channel_input}")
             return None
             
